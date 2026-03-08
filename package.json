@@ -1,0 +1,20 @@
+{
+  "name": "sofi-bot",
+  "version": "1.0.0",
+  "description": "Autonomous Sofi card drop and claim bot with human simulation",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node src/bot.js",
+    "dev": "node --watch src/bot.js"
+  },
+  "dependencies": {
+    "debug": "^4.3.7",
+    "discord.js-selfbot-v13": "^3.3.2",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3",
+    "winston": "^3.13.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
