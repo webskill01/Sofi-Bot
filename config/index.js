@@ -3,8 +3,19 @@ require('dotenv').config();
 module.exports = {
   // ─── Discord ─────────────────────────────────────────────────────────────────
   TOKEN: process.env.TOKEN,
-  CHANNEL_ID: process.env.CHANNEL_ID,
   SOFI_BOT_ID: process.env.SOFI_BOT_ID || '853629533855809596',
+
+  // ─── Multi-Channel Config ─────────────────────────────────────────────────────
+  // Add one channel ID per server you want to drop in.
+  // The bot will rotate through them in session bursts (CHANNEL_SESSION_MIN to MAX drops).
+  // Right-click a channel in Discord → Copy Channel ID (needs Developer Mode enabled).
+  CHANNELS: [
+    '925595419256451077',  // Replace with your channel ID(s)
+    '1331257457128771654',  // Add more channels here
+    '1233860234439823391',
+  ],
+  CHANNEL_SESSION_MIN: 5,  // Min consecutive drops in one channel before switching
+  CHANNEL_SESSION_MAX: 10,  // Max consecutive drops in one channel before switching
 
   // ─── Dry Run ──────────────────────────────────────────────────────────────────
   DRY_RUN: process.env.DRY_RUN === 'true',

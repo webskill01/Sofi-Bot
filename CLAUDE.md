@@ -41,7 +41,10 @@ Sofi-Bot/
 ```bash
 npm install
 cp .env.example .env
-# Fill in TOKEN, CHANNEL_ID in .env
+# Fill in TOKEN in .env
+
+# Add your channel IDs to config/index.js → CHANNELS array
+# (Right-click channel in Discord → Copy Channel ID, requires Developer Mode)
 ```
 
 **Getting your Discord token:**

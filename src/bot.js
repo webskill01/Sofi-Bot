@@ -20,8 +20,8 @@ if (!config.TOKEN) {
   logger.error('TOKEN is not set in .env — cannot start');
   process.exit(1);
 }
-if (!config.CHANNEL_ID) {
-  logger.error('CHANNEL_ID is not set in .env — cannot start');
+if (!config.CHANNELS || config.CHANNELS.length === 0) {
+  logger.error('No CHANNELS configured in config/index.js — cannot start');
   process.exit(1);
 }
 
@@ -39,6 +39,26 @@ let scdTimesToday = [];       // Planned timestamps for scd commands today
 let lastSdailyTime = 0;      // Timestamp of last sdaily command
 let lastScdPlanDate = null;   // Date string of last scd plan
 
+// -- Channel session state ----------------------------------------------------
+let activeChannelId = null;     // Currently active channel ID
+let channelDropsRemaining = 0;  // Drops left in current channel session
+
+/**
+ * Rotate to a new channel (different from the current one if possible).
+ * Resets the session drop counter.
+ */
+function rotateChannel() {
+  const channels = config.CHANNELS;
+  if (channels.length === 1) {
+    activeChannelId = channels[0];
+  } else {
+    const others = channels.filter(id => id !== activeChannelId);
+    activeChannelId = others[Math.floor(Math.random() * others.length)];
+  }
+  channelDropsRemaining = randInt(config.CHANNEL_SESSION_MIN, config.CHANNEL_SESSION_MAX);
+  logger.info(`Channel session: ${activeChannelId} — ${channelDropsRemaining} drops`);
+}
+
 // -- Utility ------------------------------------------------------------------
 
 function pickDropCommand() {
@@ -46,8 +66,9 @@ function pickDropCommand() {
 }
 
 function getChannel() {
-  const ch = client.channels.cache.get(config.CHANNEL_ID);
-  if (!ch) throw new Error(`Channel ${config.CHANNEL_ID} not found in cache`);
+  if (!activeChannelId) rotateChannel();
+  const ch = client.channels.cache.get(activeChannelId);
+  if (!ch) throw new Error(`Channel ${activeChannelId} not found in cache`);
   return ch;
 }
 
@@ -175,12 +196,20 @@ async function triggerDrop() {
     if (pendingDropResult !== null) {
       const result = pendingDropResult;
       pendingDropResult = null;
+      // Decrement channel session counter; rotate when exhausted
+      channelDropsRemaining--;
+      if (channelDropsRemaining <= 0) rotateChannel();
       return result;
     }
   }
 
   logger.warn('Sofi did not respond to drop command within timeout');
   pendingDropMsgId = null;
+
+  // Still count this as a drop attempt for channel session tracking
+  channelDropsRemaining--;
+  if (channelDropsRemaining <= 0) rotateChannel();
+
   return null;
 }
 
@@ -311,7 +340,7 @@ async function handleDrop(dropMsg) {
 
 client.on('messageCreate', async (message) => {
   if (message.author.id !== config.SOFI_BOT_ID) return;
-  if (message.channelId !== config.CHANNEL_ID) return;
+  if (message.channelId !== activeChannelId) return;
 
   // Check if Sofi is telling us there's a cooldown
   const cooldown = parseCooldownMessage(message, config.SOFI_BOT_ID);
@@ -334,7 +363,7 @@ client.on('messageCreate', async (message) => {
 // Also handle message edits — Sofi sometimes adds buttons on edit
 client.on('messageUpdate', async (oldMsg, newMsg) => {
   if (!newMsg || newMsg.author?.id !== config.SOFI_BOT_ID) return;
-  if (newMsg.channelId !== config.CHANNEL_ID) return;
+  if (newMsg.channelId !== activeChannelId) return;
   if (!waitingForDrop) return;
 
   const hadButtons = oldMsg.components && oldMsg.components.length > 0;
@@ -402,16 +431,28 @@ async function mainLoop() {
 
 client.once('ready', async () => {
   logger.info(`Logged in as ${client.user.tag} (${client.user.id})`);
-  logger.info(`Target channel: ${config.CHANNEL_ID}`);
   logger.info(`Sofi bot ID: ${config.SOFI_BOT_ID}`);
   logger.info(`Dry run mode: ${config.DRY_RUN}`);
+  logger.info(`Configured channels: ${config.CHANNELS.length}`);
 
-  const ch = client.channels.cache.get(config.CHANNEL_ID);
-  if (!ch) {
-    logger.error(`Channel ${config.CHANNEL_ID} not found. Check CHANNEL_ID in .env`);
+  // Validate all configured channels are accessible
+  let anyValid = false;
+  for (const id of config.CHANNELS) {
+    const ch = client.channels.cache.get(id);
+    if (!ch) {
+      logger.warn(`Channel ${id} not found in cache — bot may not be in that server`);
+    } else {
+      logger.info(`Channel ready: ${id} (#${ch.name || ch.id})`);
+      anyValid = true;
+    }
+  }
+  if (!anyValid) {
+    logger.error('None of the configured channels are accessible — check CHANNELS in config/index.js');
     process.exit(1);
   }
-  logger.info(`Channel found: #${ch.name || ch.id}`);
+
+  // Pick the first channel session
+  rotateChannel();
 
   mainLoop().catch(err => {
     logger.error(`Main loop crashed: ${err.message}`, err);
