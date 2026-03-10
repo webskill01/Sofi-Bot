@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:guide.sofi.gg)"
+      "WebFetch(domain:guide.sofi.gg)",
+      "Bash(node --check src/parser.js)",
+      "Bash(node -e \":*)"
     ]
   }
 }

@@ -25,7 +25,7 @@ module.exports = {
   GEN_SUPER_ULTRA: 10,          // Gen ≤ 10 = absolute top priority (rarest cards)
   GEN_ULTRA_LOW: 100,           // Gen ≤ 100 = very rare
   GEN_ULTRA_WL_MIN: 500,        // Gen ≤ 100 card must have WL > this to trigger priority
-  WL_OVERRIDE_THRESHOLD: 2500,  // If any card has WL ≥ 2500, it beats gen ≤ 100 priority
+  WL_OVERRIDE_THRESHOLD: 1000,  // If any card has WL ≥ 1000, it beats gen ≤ 100 priority
 
   // ─── Event Card Settings ──────────────────────────────────────────────────────
   // Event cards have no gen (empty gen field). Always pick unless:

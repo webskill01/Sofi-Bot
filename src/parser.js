@@ -185,6 +185,16 @@ function parseDropMessage(message) {
   }
 
   // ── Step 2: Extract wishlist counts from non-event-item buttons ────────
+  // Sofi uses abbreviated labels: "0", "82", "2.7K", "1.2K", etc.
+  const parseWL = (label) => {
+    if (!label) return null;
+    const s = label.trim().toUpperCase();
+    if (/^\d+$/.test(s)) return parseInt(s, 10);
+    const kMatch = s.match(/^(\d+(?:\.\d+)?)K$/);
+    if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
+    return null;
+  };
+
   const wishlistValues = [];
   for (const row of message.components) {
     const components = row.components || [];
@@ -192,10 +202,10 @@ function parseDropMessage(message) {
       // Skip event item buttons (they're handled separately)
       if (isEventItemButton(button)) continue;
 
-      const label = (button.label || '').trim();
-      if (/^\d+$/.test(label)) {
+      const wl = parseWL(button.label);
+      if (wl !== null) {
         wishlistValues.push({
-          wishlist: parseInt(label, 10),
+          wishlist: wl,
           customId: button.customId || null,
         });
       }
@@ -212,7 +222,7 @@ function parseDropMessage(message) {
     if (line.isEventCard) {
       // Event card WL comes from the event item button label
       const eventItems = parseEventItems(message);
-      const eventWL = eventItems.length > 0 ? parseInt(eventItems[0].label, 10) || 0 : 0;
+      const eventWL = eventItems.length > 0 ? (parseWL(eventItems[0].label) ?? 0) : 0;
       const eventCustomId = eventItems.length > 0 ? eventItems[0].customId : null;
 
       cards.push({
