@@ -50,8 +50,8 @@ module.exports = {
   GRAB_COOLDOWN_MS: 4 * 60 * 1000,      // 4 minutes between grabs
 
   // ─── Human Simulation ─────────────────────────────────────────────────────────
-  MIN_REACTION_DELAY_MS: 4000,     // Min delay before clicking claim (4s)
-  MAX_REACTION_DELAY_MS: 18000,    // Max delay before clicking claim (18s)
+  MIN_REACTION_DELAY_MS: 2000,     // Min delay before clicking claim (2s)
+  MAX_REACTION_DELAY_MS: 8000,    // Max delay before clicking claim (8s)
   LATE_MIN_REACTION_MS: 8000,      // Slower at night: min 8s
   LATE_MAX_REACTION_MS: 30000,     // Slower at night: max 30s
   EVENT_ITEM_DELAY_MIN_MS: 1000,   // Min delay before clicking event item (1s)
@@ -60,7 +60,7 @@ module.exports = {
   // ─── Sleep Window (IST = UTC+5:30) ────────────────────────────────────────────
   // Bot only sleeps during this window. Runs 24/7 otherwise with breaks.
   SLEEP_START_HOUR_IST: 2,        // Sleep starts at 2am IST
-  SLEEP_END_HOUR_IST: 5,          // Sleep ends at 5am IST
+  SLEEP_END_HOUR_IST: 7,          // Sleep ends at 7am IST
   SLEEP_JITTER_MIN: 20,           // ±20 min jitter on sleep start/end
 
   // ─── AFK / Break Simulation ───────────────────────────────────────────────────
