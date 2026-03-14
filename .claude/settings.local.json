@@ -3,7 +3,12 @@
     "allow": [
       "WebFetch(domain:guide.sofi.gg)",
       "Bash(node --check src/parser.js)",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "Bash(node --check src/bot.js)",
+      "Bash(node -e \"require\\(''./config''\\); console.log\\(''config OK''\\)\")",
+      "Bash(node -e \"const c=require\\(''./config''\\); console.log\\(''CHANNELS from fallback:'', c.CHANNELS\\)\")",
+      "Bash(node --check ecosystem.config.js)",
+      "Bash(node -e \"process.env.CHANNEL_IDS=''aaa,bbb,ccc''; require\\(''./config''\\); const c=require\\(''./config''\\); console.log\\(''CHANNELS from env:'', c.CHANNELS\\)\")"
     ]
   }
 }

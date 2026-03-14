@@ -6,14 +6,29 @@ module.exports = {
   SOFI_BOT_ID: process.env.SOFI_BOT_ID || '853629533855809596',
 
   // ─── Multi-Channel Config ─────────────────────────────────────────────────────
-  // Add one channel ID per server you want to drop in.
-  // The bot will rotate through them in session bursts (CHANNEL_SESSION_MIN to MAX drops).
-  // Right-click a channel in Discord → Copy Channel ID (needs Developer Mode enabled).
-  CHANNELS: [
-    '925595419256451077',  // Replace with your channel ID(s)
-    '1331257457128771654',  // Add more channels here
-    '1233860234439823391',
-  ],
+  // Channels to rotate drops across, in session bursts (CHANNEL_SESSION_MIN to MAX drops).
+  // Priority: CHANNEL_IDS env var (set per-instance in ecosystem.config.js)
+  //           → falls back to the hardcoded array below.
+  // CHANNEL_IDS env var format: comma-separated IDs, e.g. "id1,id2,id3"
+  CHANNELS: process.env.CHANNEL_IDS
+    ? process.env.CHANNEL_IDS.split(',').map(s => s.trim()).filter(Boolean)
+    : [
+        '925595419256451077',
+        '1331257457128771654',
+        '1233860234439823391',
+        '1337472845906710689',
+        '1337472881881514015',
+        '1037280351392903178',
+        '1037280651512119327',
+        '981737112372142110',
+        '939811010808782868',
+        '941326108358475817',
+        '870278822786924634',
+        '1118531400258302063',
+        '959046220658114570',
+        '1353032909761548299',
+        '1359154264471113879',
+      ],
   CHANNEL_SESSION_MIN: 5,  // Min consecutive drops in one channel before switching
   CHANNEL_SESSION_MAX: 10,  // Max consecutive drops in one channel before switching
 
@@ -65,7 +80,7 @@ module.exports = {
 
   // ─── AFK / Break Simulation ───────────────────────────────────────────────────
   AFK_MIN_COUNT: 2,                      // Min AFK breaks per day
-  AFK_MAX_COUNT: 3,                      // Max AFK breaks per day
+  AFK_MAX_COUNT: 4,                      // Max AFK breaks per day
   AFK_MIN_DURATION_MS: 20 * 60 * 1000,  // Min AFK duration: 20 min
   AFK_MAX_DURATION_MS: 40 * 60 * 1000,  // Max AFK duration: 40 min
   LUNCH_START_HOUR_IST: 12,             // Lunch break window start: 12pm IST

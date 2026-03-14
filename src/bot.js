@@ -11,7 +11,6 @@ const {
   waitReactionDelay,
   getDropInterval,
   simulateTyping,
-  isLateNight,
   randInt,
 } = require('./humanSim');
 
@@ -48,13 +47,15 @@ let channelDropsRemaining = 0;  // Drops left in current channel session
  * Resets the session drop counter.
  */
 function rotateChannel() {
-  const channels = config.CHANNELS;
-  if (channels.length === 1) {
-    activeChannelId = channels[0];
-  } else {
-    const others = channels.filter(id => id !== activeChannelId);
-    activeChannelId = others[Math.floor(Math.random() * others.length)];
-  }
+  // Only consider channels the bot can currently access — silently skip others
+  const accessible = config.CHANNELS.filter(id => client.channels.cache.has(id));
+  if (accessible.length === 0) throw new Error('No accessible channels — check CHANNEL_IDS');
+
+  const candidates = accessible.length === 1
+    ? accessible
+    : accessible.filter(id => id !== activeChannelId);
+
+  activeChannelId = candidates[Math.floor(Math.random() * candidates.length)];
   channelDropsRemaining = randInt(config.CHANNEL_SESSION_MIN, config.CHANNEL_SESSION_MAX);
   logger.info(`Channel session: ${activeChannelId} — ${channelDropsRemaining} drops`);
 }
@@ -266,7 +267,6 @@ async function handleDrop(dropMsg) {
   }
 
   // -- Step 2: Select and claim a regular card --------------------------------
-  const lateNight = isLateNight();
   const decision = selectCard(cards);
   logDecision(cards, decision);
 
@@ -283,7 +283,7 @@ async function handleDrop(dropMsg) {
   }
 
   // Human-like delay before clicking
-  await waitReactionDelay(lateNight);
+  await waitReactionDelay();
 
   // Log button details for debugging
   if (dropMsg.components && dropMsg.components.length > 0) {
