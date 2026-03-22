@@ -41,23 +41,34 @@ let lastScdPlanDate = null;   // Date string of last scd plan
 // -- Channel session state ----------------------------------------------------
 let activeChannelId = null;     // Currently active channel ID
 let channelDropsRemaining = 0;  // Drops left in current channel session
+let channelSessionTotal = 0;    // Total drops planned for current session (for logging)
 
 /**
  * Rotate to a new channel (different from the current one if possible).
  * Resets the session drop counter.
  */
 function rotateChannel() {
-  // Only consider channels the bot can currently access — silently skip others
-  const accessible = config.CHANNELS.filter(id => client.channels.cache.has(id));
-  if (accessible.length === 0) throw new Error('No accessible channels — check CHANNEL_IDS');
+  // Only consider channels the bot can currently access — silently skip others.
+  // Discord transiently evicts channels from cache during reconnects, so if
+  // nothing is accessible right now we keep the current channel (or pick any
+  // from the full list) rather than crashing.
+  let accessible = config.CHANNELS.filter(id => client.channels.cache.has(id));
+
+  if (accessible.length === 0) {
+    // Fallback: keep using the current channel if it's still set, otherwise
+    // pick from the configured list blindly and let getChannel() handle it.
+    logger.warn('rotateChannel: no channels in cache right now — keeping current or picking from config list');
+    accessible = activeChannelId ? [activeChannelId] : config.CHANNELS;
+  }
 
   const candidates = accessible.length === 1
     ? accessible
     : accessible.filter(id => id !== activeChannelId);
 
   activeChannelId = candidates[Math.floor(Math.random() * candidates.length)];
-  channelDropsRemaining = randInt(config.CHANNEL_SESSION_MIN, config.CHANNEL_SESSION_MAX);
-  logger.info(`Channel session: ${activeChannelId} — ${channelDropsRemaining} drops`);
+  channelSessionTotal = randInt(config.CHANNEL_SESSION_MIN, config.CHANNEL_SESSION_MAX);
+  channelDropsRemaining = channelSessionTotal;
+  logger.info(`Channel session: ${getChannelName(activeChannelId)} (${activeChannelId}) — ${channelSessionTotal} drops planned`);
 }
 
 // -- Utility ------------------------------------------------------------------
@@ -66,10 +77,22 @@ function pickDropCommand() {
   return Math.random() < 0.5 ? 'sdrop' : 'sd';
 }
 
+/** Returns "#channel-name" if cached, else the raw ID. */
+function getChannelName(id) {
+  const ch = client.channels.cache.get(id || activeChannelId);
+  return ch ? `#${ch.name || ch.id}` : `#${id || activeChannelId}`;
+}
+
 function getChannel() {
   if (!activeChannelId) rotateChannel();
-  const ch = client.channels.cache.get(activeChannelId);
-  if (!ch) throw new Error(`Channel ${activeChannelId} not found in cache`);
+  let ch = client.channels.cache.get(activeChannelId);
+  if (!ch) {
+    // Active channel dropped from cache (reconnect/guild sync) — pick another
+    logger.warn(`Channel ${activeChannelId} not in cache — rotating to next available`);
+    rotateChannel();
+    ch = client.channels.cache.get(activeChannelId);
+  }
+  if (!ch) throw new Error(`No accessible channel found after rotate — dropping this cycle`);
   return ch;
 }
 
@@ -176,8 +199,9 @@ async function checkSdaily() {
 async function triggerDrop() {
   const channel = getChannel();
   const command = pickDropCommand();
+  const dropNum = channelSessionTotal - channelDropsRemaining + 1;
 
-  logger.info(`Sending drop command: ${command}`);
+  logger.info(`Sending ${command} in ${getChannelName()} (drop ${dropNum}/${channelSessionTotal} in session)`);
   await simulateTyping(command);
 
   let ourMsg;
@@ -411,12 +435,17 @@ async function mainLoop() {
 
     // Trigger a drop
     waitingForDrop = true;
-    const dropMsg = await triggerDrop();
+    let dropMsg = null;
+    try {
+      dropMsg = await triggerDrop();
+    } catch (err) {
+      logger.warn(`Drop cycle skipped — channel unavailable: ${err.message}`);
+    }
     waitingForDrop = false;
 
     if (dropMsg) {
       await handleDrop(dropMsg);
-    } else {
+    } else if (!dropMsg) {
       logger.warn('No drop message received — will retry next cycle');
     }
 
@@ -437,15 +466,18 @@ client.once('ready', async () => {
 
   // Validate all configured channels are accessible
   let anyValid = false;
+  let validCount = 0;
   for (const id of config.CHANNELS) {
     const ch = client.channels.cache.get(id);
     if (!ch) {
-      logger.warn(`Channel ${id} not found in cache — bot may not be in that server`);
+      logger.warn(`Channel ${id} — not joined / inaccessible (skipped)`);
     } else {
-      logger.info(`Channel ready: ${id} (#${ch.name || ch.id})`);
+      logger.info(`Channel OK: ${id} (#${ch.name || ch.id})`);
       anyValid = true;
+      validCount++;
     }
   }
+  logger.info(`${validCount}/${config.CHANNELS.length} configured channels accessible`);
   if (!anyValid) {
     logger.error('None of the configured channels are accessible — check CHANNELS in config/index.js');
     process.exit(1);
