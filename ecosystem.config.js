@@ -24,7 +24,6 @@ module.exports = {
         CHANNEL_IDS: '',
       },
     },
-    // Uncomment and fill in to add a second account:
     {
       ...sharedConfig,
       name: 'sofi-bot2',
@@ -33,6 +32,17 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         TOKEN: 'ACCOUNT_2_TOKEN_HERE',
+        CHANNEL_IDS: '',
+      },
+    },
+    {
+      ...sharedConfig,
+      name: 'sofi-bot3',
+      out_file: 'logs/acc3-out.log',
+      error_file: 'logs/acc3-error.log',
+      env: {
+        NODE_ENV: 'production',
+        TOKEN: 'ACCOUNT_3_TOKEN_HERE',
         CHANNEL_IDS: '',
       },
     },
