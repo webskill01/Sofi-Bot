@@ -486,6 +486,11 @@ client.once('ready', async () => {
   // Pick the first channel session
   rotateChannel();
 
+  if (isRunning) {
+    logger.warn('Main loop already running — skipping duplicate start (stale ready event?)');
+    return;
+  }
+
   mainLoop().catch(err => {
     logger.error(`Main loop crashed: ${err.message}`, err);
     process.exit(1);
