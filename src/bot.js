@@ -507,19 +507,22 @@ client.on('disconnect', () => {
 
 // -- Graceful shutdown --------------------------------------------------------
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received — shutting down gracefully');
+async function shutdown(signal) {
+  logger.info(`${signal} received — shutting down gracefully`);
   isRunning = false;
-  await client.destroy();
+  // Force-kill after 3s in case client.destroy() hangs (prevents zombie processes)
+  const forceExit = setTimeout(() => {
+    logger.warn('Shutdown timed out — forcing exit');
+    process.exit(0);
+  }, 3000);
+  forceExit.unref(); // Don't keep the process alive just for this timer
+  try { await client.destroy(); } catch (e) {}
+  clearTimeout(forceExit);
   process.exit(0);
-});
+}
 
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received — shutting down gracefully');
-  isRunning = false;
-  await client.destroy();
-  process.exit(0);
-});
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 process.on('unhandledRejection', (err) => {
   logger.error(`Unhandled rejection: ${err?.message || err}`);
