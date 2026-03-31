@@ -550,16 +550,18 @@ async function mainLoop() {
       }
     }
 
-    // Wait for next drop cycle (8 min +/- jitter), plus any Sofi-reported cooldown
-    const nextInterval = getDropInterval();
-    const totalWait = nextInterval + pendingCooldownMs;
+    // If Sofi told us exactly when the drop is ready, wait that long.
+    // Otherwise use the normal 8-min (+/- jitter) interval.
+    let waitMs;
     if (pendingCooldownMs > 0) {
-      logger.info(`Next drop in ${Math.round(totalWait / 1000)}s (includes ${Math.round(pendingCooldownMs / 1000)}s Sofi cooldown)`);
+      waitMs = pendingCooldownMs + randInt(2000, 8000); // tiny buffer after cooldown expires
+      logger.info(`Sofi cooldown — waiting ${Math.round(waitMs / 1000)}s until drop is ready`);
+      pendingCooldownMs = 0;
     } else {
-      logger.info(`Next drop in ${Math.round(totalWait / 1000)}s`);
+      waitMs = getDropInterval();
+      logger.info(`Next drop in ${Math.round(waitMs / 1000)}s`);
     }
-    pendingCooldownMs = 0;
-    await sleep(totalWait);
+    await sleep(waitMs);
   }
 }
 
