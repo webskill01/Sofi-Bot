@@ -37,8 +37,8 @@ class Scheduler {
       this._sleepWindow = this._generateSleepWindow();
       this._afkBreaks = planAfkBreaks(this._sleepWindow);
       this._lastDate = dateStr;
-      // Persist so a same-day restart restores the same AFK schedule
-      saveState({ afkDate: dateStr, afkBreaks: this._afkBreaks });
+      // Persist so a same-day restart restores the exact same schedule
+      saveState({ afkDate: dateStr, sleepWindow: this._sleepWindow, afkBreaks: this._afkBreaks });
     }
   }
 
@@ -149,12 +149,31 @@ class Scheduler {
     const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
     const today = now.toISOString().slice(0, 10);
 
-    if (saved.afkDate === today && Array.isArray(saved.afkBreaks) && saved.afkBreaks.length > 0) {
-      this._afkBreaks = saved.afkBreaks;
-      this._lastDate = today;
-      // Regenerate sleep window (not persisted, cheap to recompute)
+    if (saved.afkDate !== today) return;
+    if (!Array.isArray(saved.afkBreaks) || saved.afkBreaks.length === 0) return;
+
+    this._afkBreaks = saved.afkBreaks;
+    this._lastDate = today;
+
+    // Restore the exact sleep window from state; fall back to regenerating only if missing
+    if (saved.sleepWindow && saved.sleepWindow.startMinutes != null) {
+      this._sleepWindow = saved.sleepWindow;
+    } else {
       this._sleepWindow = this._generateSleepWindow();
-      logger.info(`Restored AFK schedule from saved state (${this._afkBreaks.length} breaks)`);
+    }
+
+    // Re-log the full schedule so it's visible in logs on every restart
+    logger.info(`Restored today's schedule from saved state (${today})`);
+    const fmt = (m) => {
+      const h = Math.floor(m / 60);
+      const min = m % 60;
+      return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+    };
+    logger.info(`Today's sleep window: ${fmt(this._sleepWindow.startMinutes)} IST - ${fmt(this._sleepWindow.endMinutes)} IST`);
+    for (const b of this._afkBreaks) {
+      const h = Math.floor(b.startMinutes / 60);
+      const m = b.startMinutes % 60;
+      logger.info(`AFK break [${b.label}] at ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} IST for ${Math.round(b.durationMs / 60000)}min`);
     }
   }
 
