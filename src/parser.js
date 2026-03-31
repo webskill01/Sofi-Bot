@@ -273,16 +273,32 @@ function parseCooldownMessage(message, sofiBotId) {
     ...(message.embeds || []).map(e => `${e.title || ''} ${e.description || ''}`),
   ].join(' ').toLowerCase();
 
-  if (!text.includes('cooldown') && !text.includes('wait') && !text.includes('minute')) {
+  // Sofi cooldown formats observed:
+  //   "Your Drop will be ready in: 2m 21s"  ← most common
+  //   "on cooldown"
+  //   "wait X minutes"
+  const isCooldown =
+    text.includes('cooldown') ||
+    text.includes('wait') ||
+    text.includes('minute') ||
+    text.includes('ready in');
+
+  if (!isCooldown) {
     return { onCooldown: false, remainingMs: 0 };
   }
 
+  // Try "2m 21s" format first (Sofi's primary format)
+  const msDurationMatch = text.match(/(\d+)\s*m\s*(\d+)\s*s/i);
+  // Then "MM:SS" format
+  const mmssMatch = text.match(/(\d+):(\d{2})/);
+  // Then separate word forms
   const minuteMatch = text.match(/(\d+)\s*(?:min|minute)/i);
   const secMatch = text.match(/(\d+)\s*(?:sec|second)/i);
-  const mmssMatch = text.match(/(\d+):(\d{2})/);
 
   let remainingMs = 0;
-  if (mmssMatch) {
+  if (msDurationMatch) {
+    remainingMs = (parseInt(msDurationMatch[1]) * 60 + parseInt(msDurationMatch[2])) * 1000;
+  } else if (mmssMatch) {
     remainingMs = (parseInt(mmssMatch[1]) * 60 + parseInt(mmssMatch[2])) * 1000;
   } else {
     if (minuteMatch) remainingMs += parseInt(minuteMatch[1]) * 60 * 1000;

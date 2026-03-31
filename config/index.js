@@ -99,4 +99,13 @@ module.exports = {
   // sdaily — run every ~24 hours
   SDAILY_INTERVAL_MS: 24 * 60 * 60 * 1000,   // 24 hours base
   SDAILY_JITTER_MS: 1 * 60 * 60 * 1000,      // 0-1 hour extra delay after base interval
+
+  // ─── Sofi Downtime Detection ──────────────────────────────────────────────────
+  // If Sofi doesn't respond at all (not even a cooldown) for this many consecutive
+  // drop attempts, the bot declares a downtime and pauses.
+  SOFI_DOWNTIME_THRESHOLD: 3,
+  SOFI_DOWNTIME_WAIT_MIN_MS: 60 * 60 * 1000,      // min downtime pause: 1 hour
+  SOFI_DOWNTIME_WAIT_MAX_MS: 2 * 60 * 60 * 1000,  // max downtime pause: 2 hours
+  SOFI_PROBE_RETRY_COUNT: 2,                       // extra probe attempts after the first (3 total)
+  SOFI_PROBE_INTERVAL_MS: 10 * 60 * 1000,          // 10 min between probe retries
 };

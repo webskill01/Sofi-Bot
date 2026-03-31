@@ -48,6 +48,11 @@ let lastGrabTime = 0;
 let waitingForDrop = false;
 let pendingDropResult = null;
 
+// Sofi downtime detection
+let sofiRespondedDuringWait = false;  // true if Sofi sent ANY message while we waited (means she's alive)
+let consecutiveSofiTimeouts = 0;      // count of drops where Sofi was completely silent
+let pendingCooldownMs = 0;            // cooldown duration from Sofi's last cooldown reply
+
 // Extra command tracking
 let scdTimesToday = [];       // Planned timestamps for scd commands today
 let lastSdailyTime = 0;      // Timestamp of last sdaily command
@@ -388,11 +393,15 @@ client.on('messageCreate', async (message) => {
   if (message.author.id !== config.SOFI_BOT_ID) return;
   if (message.channelId !== activeChannelId) return;
 
+  // Any response from Sofi (cooldown, drop, anything) proves she's online
+  sofiRespondedDuringWait = true;
+
   // Check if Sofi is telling us there's a cooldown
   const cooldown = parseCooldownMessage(message, config.SOFI_BOT_ID);
   if (cooldown.onCooldown) {
-    logger.warn(`Sofi cooldown detected — waiting ${Math.round(cooldown.remainingMs / 1000)}s`);
-    await sleep(cooldown.remainingMs);
+    logger.warn(`Sofi cooldown detected — drop ready in ${Math.round(cooldown.remainingMs / 1000)}s`);
+    // Store the remaining cooldown so the main loop can add it to the next drop interval
+    pendingCooldownMs = cooldown.remainingMs;
     return;
   }
 
@@ -421,6 +430,63 @@ client.on('messageUpdate', async (oldMsg, newMsg) => {
     waitingForDrop = false;
   }
 });
+
+// -- Sofi downtime handling ---------------------------------------------------
+
+/**
+ * Called when Sofi has been completely silent for SOFI_DOWNTIME_THRESHOLD
+ * consecutive drops (she's likely offline/restarting).
+ *
+ * Strategy:
+ *   1. Wait 1–2 hours
+ *   2. Probe with a drop command
+ *   3. If probe succeeds → return (resume normal loop)
+ *   4. If probe fails → wait SOFI_PROBE_INTERVAL_MS and retry (up to SOFI_PROBE_RETRY_COUNT extra times)
+ *   5. If all probes fail → loop back to step 1 (keep waiting)
+ */
+async function handleSofiDowntime() {
+  consecutiveSofiTimeouts = 0;
+
+  while (true) {
+    const waitMs = randInt(config.SOFI_DOWNTIME_WAIT_MIN_MS, config.SOFI_DOWNTIME_WAIT_MAX_MS);
+    logger.warn(`Sofi downtime detected — pausing all activity for ${Math.round(waitMs / 60000)}min`);
+    await sleep(waitMs);
+
+    const totalAttempts = 1 + config.SOFI_PROBE_RETRY_COUNT;
+    let sofiBack = false;
+
+    for (let attempt = 1; attempt <= totalAttempts; attempt++) {
+      logger.info(`Sofi probe attempt ${attempt}/${totalAttempts}...`);
+
+      sofiRespondedDuringWait = false;
+      waitingForDrop = true;
+      let probeMsg = null;
+      try {
+        probeMsg = await triggerDrop();
+      } catch (err) {
+        logger.warn(`Probe drop failed: ${err.message}`);
+      }
+      waitingForDrop = false;
+
+      if (probeMsg || sofiRespondedDuringWait) {
+        logger.info('Sofi is back online — resuming normal operation');
+        if (probeMsg) await handleDrop(probeMsg);
+        sofiBack = true;
+        break;
+      }
+
+      logger.warn(`Probe ${attempt}/${totalAttempts} — Sofi still not responding`);
+      if (attempt < totalAttempts) {
+        logger.info(`Waiting ${config.SOFI_PROBE_INTERVAL_MS / 60000}min before next probe`);
+        await sleep(config.SOFI_PROBE_INTERVAL_MS);
+      }
+    }
+
+    if (sofiBack) return;
+    logger.warn(`All ${totalAttempts} probes failed — Sofi still down, waiting again`);
+    // loop: wait another 1–2h and probe again
+  }
+}
 
 // -- Main loop ----------------------------------------------------------------
 
@@ -456,6 +522,8 @@ async function mainLoop() {
     await checkSdaily();
 
     // Trigger a drop
+    sofiRespondedDuringWait = false;
+    pendingCooldownMs = 0;
     waitingForDrop = true;
     let dropMsg = null;
     try {
@@ -466,15 +534,32 @@ async function mainLoop() {
     waitingForDrop = false;
 
     if (dropMsg) {
+      consecutiveSofiTimeouts = 0;
       await handleDrop(dropMsg);
-    } else if (!dropMsg) {
-      logger.warn('No drop message received — will retry next cycle');
+    } else if (sofiRespondedDuringWait) {
+      // Sofi replied (e.g. cooldown) — she's online, just not a drop message
+      consecutiveSofiTimeouts = 0;
+      logger.warn('No drop received (Sofi responded but not a drop) — retrying next cycle');
+    } else {
+      // Complete silence — Sofi may be offline
+      consecutiveSofiTimeouts++;
+      logger.warn(`Sofi did not respond (${consecutiveSofiTimeouts}/${config.SOFI_DOWNTIME_THRESHOLD} consecutive silences)`);
+      if (consecutiveSofiTimeouts >= config.SOFI_DOWNTIME_THRESHOLD) {
+        await handleSofiDowntime();
+        consecutiveSofiTimeouts = 0;
+      }
     }
 
-    // Wait for next drop cycle (8 min +/- jitter)
+    // Wait for next drop cycle (8 min +/- jitter), plus any Sofi-reported cooldown
     const nextInterval = getDropInterval();
-    logger.info(`Next drop in ${Math.round(nextInterval / 1000)}s`);
-    await sleep(nextInterval);
+    const totalWait = nextInterval + pendingCooldownMs;
+    if (pendingCooldownMs > 0) {
+      logger.info(`Next drop in ${Math.round(totalWait / 1000)}s (includes ${Math.round(pendingCooldownMs / 1000)}s Sofi cooldown)`);
+    } else {
+      logger.info(`Next drop in ${Math.round(totalWait / 1000)}s`);
+    }
+    pendingCooldownMs = 0;
+    await sleep(totalWait);
   }
 }
 
