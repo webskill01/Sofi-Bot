@@ -98,5 +98,5 @@ module.exports = {
 
   // sdaily — run every ~24 hours
   SDAILY_INTERVAL_MS: 24 * 60 * 60 * 1000,   // 24 hours base
-  SDAILY_JITTER_MS: 2 * 60 * 60 * 1000,      // 0-2 hours extra delay after base interval
+  SDAILY_JITTER_MS: 1 * 60 * 60 * 1000,      // 0-1 hour extra delay after base interval
 };

@@ -1,8 +1,9 @@
 require('dotenv').config();
-const { Client } = require('discord.js-selfbot-v13');
+const { Client, Options } = require('discord.js-selfbot-v13');
 
 const config = require('../config');
 const logger = require('./logger');
+const { loadState, saveState } = require('./stateStore');
 const { isSofiDropMessage, parseDropMessage, parseEventItems, parseCooldownMessage } = require('./parser');
 const { selectCard, logDecision } = require('./claimDecision');
 const scheduler = require('./scheduler');
@@ -25,7 +26,21 @@ if (!config.CHANNELS || config.CHANNELS.length === 0) {
 }
 
 // -- Bot state ----------------------------------------------------------------
-const client = new Client({ checkUpdate: false });
+const client = new Client({
+  checkUpdate: false,
+  makeCache: Options.cacheWithLimits({
+    ...Options.defaultMakeCacheSettings,
+    MessageManager: 50,      // keep only last 50 messages per channel
+    GuildMemberManager: 10,  // minimal member cache (bot only needs its own user)
+  }),
+  sweepers: {
+    ...Options.defaultSweeperSettings,
+    messages: {
+      interval: 5 * 60,   // run sweeper every 5 minutes
+      lifetime: 10 * 60,  // evict messages older than 10 minutes
+    },
+  },
+});
 
 let isRunning = false;
 let pendingDropMsgId = null;
@@ -104,7 +119,8 @@ function canGrab() {
 
 /**
  * Plan scd command times for today.
- * Spreads 10-12 commands randomly across waking hours (5am-2am IST).
+ * Divides waking hours into equal slots and picks one random time per slot,
+ * guaranteeing a minimum gap between consecutive scd commands.
  */
 function planScdTimes() {
   const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
@@ -116,41 +132,46 @@ function planScdTimes() {
   const count = randInt(config.SCD_DAILY_COUNT_MIN, config.SCD_DAILY_COUNT_MAX);
   const times = [];
 
-  // Spread across waking hours: 5am (300min) to 1:30am next day (1530min)
+  // Waking hours: sleep end (5am) to midnight
   const wakeStartMin = config.SLEEP_END_HOUR_IST * 60;
-  const wakeEndMin = 24 * 60; // midnight
-  const rangeMs = (wakeEndMin - wakeStartMin) * 60 * 1000;
+  const wakeEndMin = 24 * 60;
+  const slotSize = Math.floor((wakeEndMin - wakeStartMin) / count); // even slots
 
-  const todayStartMs = Date.now();
+  const nowMs = Date.now();
   const istNow = now.getUTCHours() * 60 + now.getUTCMinutes();
 
   for (let i = 0; i < count; i++) {
-    // Random time within waking hours
-    const offsetMin = randInt(0, wakeEndMin - wakeStartMin);
-    const targetMin = wakeStartMin + offsetMin;
+    // Pick a random minute within this slot, leaving 10% margin at each edge
+    const slotStart = wakeStartMin + i * slotSize;
+    const margin = Math.floor(slotSize * 0.1);
+    const targetMin = randInt(slotStart + margin, slotStart + slotSize - margin);
 
-    // Convert to timestamp: minutes from now
     let diffMin = targetMin - istNow;
-    if (diffMin < 0) diffMin += 24 * 60; // Wrap to next occurrence
+    if (diffMin < 0) diffMin += 24 * 60; // wrap to next occurrence
 
-    const targetMs = todayStartMs + diffMin * 60 * 1000 + randInt(0, 59000);
+    const targetMs = nowMs + diffMin * 60 * 1000 + randInt(0, 59000);
     times.push(targetMs);
   }
 
   times.sort((a, b) => a - b);
   scdTimesToday = times;
-  logger.info(`Planned ${count} scd commands for today`);
+  saveState({ scdTimesToday, lastScdPlanDate });
+  logger.info(`Planned ${count} scd commands for today (slot-spaced, ~${slotSize}min apart)`);
 }
 
 /**
- * Check and run any pending scd commands.
+ * Check and run one pending scd command (if due).
+ * Deliberately runs at most ONE per call so that even if multiple timestamps
+ * became overdue (e.g. during an AFK break), they fire one-per-drop-cycle
+ * (~8 min apart) instead of all at once.
  */
 async function checkScdCommands() {
   planScdTimes();
 
   const now = Date.now();
-  while (scdTimesToday.length > 0 && scdTimesToday[0] <= now) {
+  if (scdTimesToday.length > 0 && scdTimesToday[0] <= now) {
     scdTimesToday.shift();
+    saveState({ scdTimesToday, lastScdPlanDate });
 
     try {
       const channel = getChannel();
@@ -183,6 +204,7 @@ async function checkSdaily() {
       await simulateTyping('sdaily');
       await channel.send('sdaily');
       lastSdailyTime = now;
+      saveState({ lastSdailyTime });
       logger.info('Sent sdaily command');
       await sleep(randInt(3000, 8000));
     } catch (err) {
@@ -482,6 +504,19 @@ client.once('ready', async () => {
     logger.error('None of the configured channels are accessible — check CHANNELS in config/index.js');
     process.exit(1);
   }
+
+  // Restore persisted state so restarts don't reset schedules mid-day
+  const saved = loadState();
+  if (saved.lastSdailyTime) {
+    lastSdailyTime = saved.lastSdailyTime;
+    logger.info(`Restored lastSdailyTime from state (${new Date(lastSdailyTime).toISOString()})`);
+  }
+  if (saved.lastScdPlanDate && saved.scdTimesToday) {
+    lastScdPlanDate = saved.lastScdPlanDate;
+    scdTimesToday = saved.scdTimesToday;
+    logger.info(`Restored scd plan: ${scdTimesToday.length} commands remaining today`);
+  }
+  scheduler.restoreState(saved);
 
   // Pick the first channel session
   rotateChannel();

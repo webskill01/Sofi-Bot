@@ -8,6 +8,7 @@ const {
   planAfkBreaks,
   getCurrentAfkBreak,
 } = require('./humanSim');
+const { saveState } = require('./stateStore');
 
 /**
  * Scheduler manages:
@@ -36,6 +37,8 @@ class Scheduler {
       this._sleepWindow = this._generateSleepWindow();
       this._afkBreaks = planAfkBreaks(this._sleepWindow);
       this._lastDate = dateStr;
+      // Persist so a same-day restart restores the same AFK schedule
+      saveState({ afkDate: dateStr, afkBreaks: this._afkBreaks });
     }
   }
 
@@ -131,6 +134,28 @@ class Scheduler {
     }
 
     return false;
+  }
+
+  /**
+   * Restore state from a previous run (loaded via stateStore).
+   * If the saved date matches today's IST date, reuse the saved AFK schedule
+   * so restarts don't randomise breaks mid-day.
+   *
+   * @param {object} saved — result of loadState()
+   */
+  restoreState(saved) {
+    if (!saved || !saved.afkDate || !saved.afkBreaks) return;
+
+    const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+    const today = now.toISOString().slice(0, 10);
+
+    if (saved.afkDate === today && Array.isArray(saved.afkBreaks) && saved.afkBreaks.length > 0) {
+      this._afkBreaks = saved.afkBreaks;
+      this._lastDate = today;
+      // Regenerate sleep window (not persisted, cheap to recompute)
+      this._sleepWindow = this._generateSleepWindow();
+      logger.info(`Restored AFK schedule from saved state (${this._afkBreaks.length} breaks)`);
+    }
   }
 
   /**
