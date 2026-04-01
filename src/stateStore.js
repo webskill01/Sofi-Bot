@@ -10,7 +10,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const STATE_FILE = path.join('logs', 'state.json');
+const instanceId = process.env.INSTANCE_ID || 'default';
+const STATE_FILE = path.join('logs', `state-${instanceId}.json`);
 
 /**
  * Load persisted state. Returns {} if file is missing or corrupt.
