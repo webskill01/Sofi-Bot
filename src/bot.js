@@ -134,12 +134,19 @@ function planScdTimes() {
   if (dateStr === lastScdPlanDate) return; // Already planned for today
   lastScdPlanDate = dateStr;
 
-  const count = randInt(config.SCD_DAILY_COUNT_MIN, config.SCD_DAILY_COUNT_MAX);
+  const lazy = scheduler.isLazyDay();
+  const countMin = lazy ? config.LAZY_SCD_DAILY_COUNT_MIN : config.SCD_DAILY_COUNT_MIN;
+  const countMax = lazy ? config.LAZY_SCD_DAILY_COUNT_MAX : config.SCD_DAILY_COUNT_MAX;
+  const count = randInt(countMin, countMax);
   const times = [];
 
-  // Waking hours: sleep end (5am) to midnight
-  const wakeStartMin = config.SLEEP_END_HOUR_IST * 60;
-  const wakeEndMin = 24 * 60;
+  // Waking hours: sleep end to sleep start (lazy day: 10am-8pm, normal: 5am-2am)
+  const wakeStartMin = lazy
+    ? config.LAZY_SLEEP_END_HOUR_IST * 60
+    : config.SLEEP_END_HOUR_IST * 60;
+  const wakeEndMin = lazy
+    ? config.LAZY_SLEEP_START_HOUR_IST * 60
+    : 24 * 60;
   const slotSize = Math.floor((wakeEndMin - wakeStartMin) / count); // even slots
 
   const nowMs = Date.now();
@@ -393,6 +400,11 @@ client.on('messageCreate', async (message) => {
   if (message.author.id !== config.SOFI_BOT_ID) return;
   if (message.channelId !== activeChannelId) return;
 
+  // Ignore ambient Sofi traffic unless this instance is actively waiting for
+  // a response to its own drop command. Shared drop channels can contain other
+  // users' cooldown replies, which would otherwise create false warnings.
+  if (!waitingForDrop) return;
+
   // Any response from Sofi (cooldown, drop, anything) proves she's online
   sofiRespondedDuringWait = true;
 
@@ -404,9 +416,6 @@ client.on('messageCreate', async (message) => {
     pendingCooldownMs = cooldown.remainingMs;
     return;
   }
-
-  // Only accept drop messages while we're waiting for our own drop
-  if (!waitingForDrop) return;
 
   if (isSofiDropMessage(message, config.SOFI_BOT_ID)) {
     logger.debug(`Received Sofi drop message: ${message.id}`);
@@ -558,8 +567,11 @@ async function mainLoop() {
       logger.info(`Sofi cooldown — waiting ${Math.round(waitMs / 1000)}s until drop is ready`);
       pendingCooldownMs = 0;
     } else {
-      waitMs = getDropInterval();
-      logger.info(`Next drop in ${Math.round(waitMs / 1000)}s`);
+      const lazy = scheduler.isLazyDay();
+      const windDown = scheduler.isWindDownEvening();
+      waitMs = getDropInterval({ lazy, windDown });
+      const mode = lazy ? ' (lazy day)' : windDown ? ' (wind-down)' : '';
+      logger.info(`Next drop in ${Math.round(waitMs / 1000)}s${mode}`);
     }
     await sleep(waitMs);
   }
@@ -571,6 +583,7 @@ client.once('ready', async () => {
   logger.info(`Logged in as ${client.user.tag} (${client.user.id})`);
   logger.info(`Sofi bot ID: ${config.SOFI_BOT_ID}`);
   logger.info(`Dry run mode: ${config.DRY_RUN}`);
+  logger.info(`Lazy day weights: Mon=${config.LAZY_DAY_WEIGHTS[0]} Tue=${config.LAZY_DAY_WEIGHTS[1]} Wed=${config.LAZY_DAY_WEIGHTS[2]} Thu=${config.LAZY_DAY_WEIGHTS[3]} Fri=${config.LAZY_DAY_WEIGHTS[4]}`);
   logger.info(`Configured channels: ${config.CHANNELS.length}`);
 
   // Validate all configured channels are accessible

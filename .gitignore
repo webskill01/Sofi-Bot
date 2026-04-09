@@ -3,3 +3,15 @@ node_modules/
 logs/
 *.log
 ecosystem.config.js
+
+# AI tooling (not part of the bot)
+AGENTS.md
+GEMINI.md
+CODE_REVIEW_GRAPH_GUIDE.md
+.claude/
+.cursorrules
+.windsurfrules
+.mcp.json
+
+# CRG graph database
+.code-review-graph/

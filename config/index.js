@@ -100,6 +100,39 @@ module.exports = {
   SDAILY_INTERVAL_MS: 24 * 60 * 60 * 1000,   // 24 hours base
   SDAILY_JITTER_MS: 1 * 60 * 60 * 1000,      // 0-1 hour extra delay after base interval
 
+  // ─── Lazy Day (Weekly Reduced Activity) ────────────────────────────────────────
+  // Once per week, a random weekday has reduced activity to simulate a real player.
+  // Weights: [Mon, Tue, Wed, Thu, Fri, Sat, Sun] — higher = more likely to be chosen.
+  // Sat/Sun are 0 because real players grind on weekends.
+  LAZY_DAY_WEIGHTS: [30, 30, 15, 10, 5, 0, 0],
+  LAZY_DAY_SKIP_CHANCE: 0.15,             // 15% chance no lazy day this week
+
+  // Lazy day sleep window (wake late, sleep early)
+  LAZY_SLEEP_START_HOUR_IST: 20,          // Sleep at 8pm IST (with jitter up to 10pm)
+  LAZY_SLEEP_END_HOUR_IST: 10,            // Wake at 10am IST base
+  LAZY_SLEEP_END_MAX_HOUR_IST: 12,        // Wake as late as 12pm IST
+
+  // Lazy day drop timing
+  LAZY_DROP_COOLDOWN_MS: 15 * 60 * 1000,          // 15 min base cooldown
+  LAZY_DROP_JITTER_MIN_MS: 0,                     // Min normal jitter
+  LAZY_DROP_JITTER_MAX_MS: 10 * 60 * 1000,        // Max normal jitter (10 min)
+  LAZY_DROP_LATE_JITTER_MAX_MS: 15 * 60 * 1000,   // Max "distracted" jitter (15 min)
+  LAZY_DROP_LATE_CHANCE: 0.35,                     // 35% chance of distracted gap
+
+  // Lazy day AFK breaks (fewer but longer)
+  LAZY_AFK_MIN_COUNT: 1,
+  LAZY_AFK_MAX_COUNT: 2,
+  LAZY_AFK_MIN_DURATION_MS: 40 * 60 * 1000,       // 40 min
+  LAZY_AFK_MAX_DURATION_MS: 90 * 60 * 1000,       // 90 min
+
+  // Lazy day scd commands (fewer)
+  LAZY_SCD_DAILY_COUNT_MIN: 2,
+  LAZY_SCD_DAILY_COUNT_MAX: 4,
+
+  // Night-before wind-down: bump late chance after this hour the evening before lazy day
+  LAZY_WIND_DOWN_HOUR_IST: 21,            // 9pm IST
+  LAZY_WIND_DOWN_LATE_CHANCE: 0.20,        // 20% late chance (up from 12%)
+
   // ─── Sofi Downtime Detection ──────────────────────────────────────────────────
   // If Sofi doesn't respond at all (not even a cooldown) for this many consecutive
   // drop attempts, the bot declares a downtime and pauses.

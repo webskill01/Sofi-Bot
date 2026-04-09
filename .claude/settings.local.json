@@ -8,7 +8,15 @@
       "Bash(node -e \"require\\(''./config''\\); console.log\\(''config OK''\\)\")",
       "Bash(node -e \"const c=require\\(''./config''\\); console.log\\(''CHANNELS from fallback:'', c.CHANNELS\\)\")",
       "Bash(node --check ecosystem.config.js)",
-      "Bash(node -e \"process.env.CHANNEL_IDS=''aaa,bbb,ccc''; require\\(''./config''\\); const c=require\\(''./config''\\); console.log\\(''CHANNELS from env:'', c.CHANNELS\\)\")"
+      "Bash(node -e \"process.env.CHANNEL_IDS=''aaa,bbb,ccc''; require\\(''./config''\\); const c=require\\(''./config''\\); console.log\\(''CHANNELS from env:'', c.CHANNELS\\)\")",
+      "mcp__code-review-graph__get_architecture_overview_tool",
+      "mcp__code-review-graph__build_or_update_graph_tool",
+      "Bash(pip show:*)",
+      "Bash(pip3 show:*)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "code-review-graph"
+  ]
 }
