@@ -62,6 +62,28 @@ test('shells drop: cards skip the free item button (regression)', () => {
   assert.deepStrictEqual(cards.map(c => c.customId), ['dh_1', 'dh_3']);
 });
 
+// ── Future-event-proof: new items work by config/emoji alone ───────────────
+const { parseEventItems: pei } = require('../src/parser');
+const evBtn = (emoji, label) => ({ type: 'BUTTON', style: 'PRIMARY', emoji, label, customId: 'x' });
+const drop1 = (btn) => ({ id: 'm', content: '`1.` :x: | Item', author: { id: 'z' }, components: [{ components: [btn] }], embeds: [] });
+
+test('rose unicode item (in config emoji list) detected', () => {
+  assert.strictEqual(pei(drop1(evBtn({ name: '🌹', id: null }, undefined))).length, 1);
+});
+test('candy custom-emoji item (in config names) detected', () => {
+  assert.strictEqual(pei(drop1(evBtn({ name: 'candy', id: '999' }, undefined))).length, 1);
+});
+test('brand-new custom-emoji item (not in config) still auto-detected', () => {
+  assert.strictEqual(pei(drop1(evBtn({ name: 'brandnew_thing', id: '777' }, undefined))).length, 1);
+});
+test('event CARD with event emoji + wishlist is NOT an item', () => {
+  assert.strictEqual(pei(drop1(evBtn({ name: '🌹', id: null }, '250'))).length, 0);
+});
+test('unknown UNICODE emoji with no label is NOT grabbed (avoids false positives)', () => {
+  // a bare unicode emoji not in config and no custom id → not an item
+  assert.strictEqual(pei(drop1(evBtn({ name: '🎲', id: null }, undefined))).length, 0);
+});
+
 // ── Task 4: currency / lottery parsers ─────────────────────────────────────
 test('parseCoffeeGrab reads delta from grab reply', () => {
   const m = { content: "<@u>'s caffeine level is raising after drinking ☕ **17 Coffee**", embeds: [] };

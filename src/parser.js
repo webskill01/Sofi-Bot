@@ -93,26 +93,17 @@ function isEventItemButton(button) {
   // item (onigiri/shells/coffee giveaway) has no numeric wishlist label.
   if (parseWL(button.label) !== null) return false;
 
-  // Label can be numeric (e.g. "80") or null/empty for event items like onigiri
-  // The key identifier is the emoji, not the label
+  // ── Config-driven matching — to support a NEW event, just edit config/index.js ──
+  // Unicode emoji items (☕ 🍙 🌹 🐚 🍬): match the raw emoji character.
+  if (config.EVENT_ITEM_EMOJIS.includes(emoji.name || '')) return true;
+  // Discord custom-emoji items (:onigiri: :candy:): match the emoji name.
+  if (config.EVENT_ITEM_NAMES.some(name => emojiName.includes(name.toLowerCase()))) return true;
 
-  // Check against configured event item unicode emojis (e.g. rice_ball -> 🍙)
-  const emojiChar = emoji.name || '';
-  if (config.EVENT_ITEM_EMOJIS.includes(emojiChar)) return true;
-
-  // Check against configured event item names
-  const isKnownItem = config.EVENT_ITEM_NAMES.some(
-    name => emojiName.includes(name.toLowerCase())
-  );
-  if (isKnownItem) return true;
-
-  // Check common unicode emoji names used by Discord (e.g. "rice_ball" for 🍙)
-  const unicodeNames = ['rice_ball', 'shell', 'rose', 'cherry_blossom', 'candy', 'star'];
-  if (unicodeNames.some(n => emojiName.includes(n))) return true;
-
-  // If it has a custom emoji that's not dropheart, likely an event item
-  if (emoji.id && emojiName !== 'dropheart') {
-    logger.debug(`Unknown non-dropheart button emoji: "${emojiName}" (id: ${emoji.id}) — treating as event item`);
+  // Fallback: any other non-dropheart CUSTOM emoji on an unlabeled button is
+  // almost certainly a free event item (labeled = card, already excluded above).
+  // Keeps the bot working for a brand-new custom-emoji event before config is updated.
+  if (emoji.id) {
+    logger.debug(`Unknown non-dropheart item emoji "${emojiName}" (id: ${emoji.id}) — treating as free event item`);
     return true;
   }
 

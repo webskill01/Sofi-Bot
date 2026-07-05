@@ -1,5 +1,6 @@
 const { createLogger, format, transports } = require('winston');
 const path = require('path');
+const { instanceId } = require('./instance');
 
 const { combine, timestamp, printf, colorize, errors } = format;
 
@@ -24,16 +25,16 @@ const logger = createLogger({
         logFormat
       ),
     }),
-    // File: all logs
+    // File: all logs (per-instance so multiple bots don't interleave)
     new transports.File({
-      filename: path.join('logs', 'sofi-bot.log'),
+      filename: path.join('logs', `sofi-bot-${instanceId}.log`),
       maxsize: 5 * 1024 * 1024, // 5MB
       maxFiles: 5,
       tailable: true,
     }),
-    // File: errors only
+    // File: errors only (per-instance)
     new transports.File({
-      filename: path.join('logs', 'error.log'),
+      filename: path.join('logs', `error-${instanceId}.log`),
       level: 'error',
       maxsize: 2 * 1024 * 1024,
       maxFiles: 3,

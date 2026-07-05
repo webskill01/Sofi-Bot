@@ -49,11 +49,18 @@ module.exports = {
   EVENT_NORMAL_WL_OVERRIDE: 1000,   // Normal card WL must exceed this to beat low-WL event card
 
   // ─── Event Item Settings ──────────────────────────────────────────────────────
-  // Special event items (onigiri, shells, roses) appear as buttons with event emoji.
-  // Claiming these does NOT consume grab cooldown — always claim them.
-  // Change these names each event season.
-  EVENT_ITEM_NAMES: ['onigiri', 'coffee'],
-  EVENT_ITEM_EMOJIS: ['🍙', '☕'],
+  // Free event items (onigiri, shells, roses, coffee...) appear as drop buttons
+  // with a special emoji and NO wishlist number. Claiming them is free (doesn't
+  // use the grab), so the bot grabs them first, then claims a card.
+  //
+  // TO SUPPORT A NEW EVENT: just add the item here — nothing else to change.
+  //   • Unicode emoji (☕ 🍙 🌹 🐚 🍬): add the emoji character to EVENT_ITEM_EMOJIS.
+  //   • Discord custom emoji (:onigiri:): add its name to EVENT_ITEM_NAMES.
+  // Custom-emoji items are also auto-detected, but listing them is clearer.
+  // (Event *cards* — event emoji + a wishlist number — are handled automatically
+  //  by the claim engine and must NOT be listed here.)
+  EVENT_ITEM_NAMES: ['onigiri', 'coffee', 'shell', 'rose', 'candy', 'cherry_blossom'],
+  EVENT_ITEM_EMOJIS: ['🍙', '☕', '🐚', '🌹', '🍬', '🌸', '🍡', '🎃', '🍫'],
 
   // ─── Drop Cycle ───────────────────────────────────────────────────────────────
   DROP_COOLDOWN_MS: 8 * 60 * 1000,      // 8 minutes base (Sofi's cooldown)

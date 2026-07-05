@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const instanceId = process.env.INSTANCE_ID || 'default';
+const { instanceId } = require('./instance');
 const STATE_FILE = path.join('logs', `state-${instanceId}.json`);
 
 /**
