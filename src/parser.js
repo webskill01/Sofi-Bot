@@ -272,7 +272,8 @@ function parseCooldownMessage(message, sofiBotId) {
     if (secMatch) remainingMs += parseInt(secMatch[1]) * 1000;
   }
 
-  remainingMs += 5000;
+  // Return the TRUE remaining time so logs match Sofi exactly. A small safety
+  // buffer is added by the caller at wait time, not baked in here.
   return { onCooldown: true, remainingMs };
 }
 

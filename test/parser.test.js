@@ -68,22 +68,22 @@ const cd = (content) => parseCooldownMessage({ author: { id: 'sofi' }, content, 
 const SOFI = '853629533855809596';
 const cdSofi = (content) => parseCooldownMessage({ author: { id: SOFI }, content, embeds: [] }, SOFI);
 
-test('bare seconds "12s" parses to 12s (+5s buffer)', () => {
+test('bare seconds "12s" parses to exactly 12s (no baked buffer)', () => {
   const r = cd('@Toji Your Drop will be ready in: 12s');
   assert.strictEqual(r.onCooldown, true);
-  assert.strictEqual(r.remainingMs, 12000 + 5000);
+  assert.strictEqual(r.remainingMs, 12000);
 });
 
-test('compound "2m 25s" parses to 145s (+buffer)', () => {
-  assert.strictEqual(cd('Your Drop will be ready in: 2m 25s').remainingMs, 145000 + 5000);
+test('compound "1m 25s" parses to exactly 85s', () => {
+  assert.strictEqual(cd('Your Drop will be ready in: 1m 25s').remainingMs, 85000);
 });
 
-test('bare minutes "3m" parses to 180s (+buffer)', () => {
-  assert.strictEqual(cd('ready in: 3m').remainingMs, 180000 + 5000);
+test('bare minutes "3m" parses to 180s', () => {
+  assert.strictEqual(cd('ready in: 3m').remainingMs, 180000);
 });
 
 test('word form "30 seconds" still parses', () => {
-  assert.strictEqual(cd('please wait 30 seconds').remainingMs, 30000 + 5000);
+  assert.strictEqual(cd('please wait 30 seconds').remainingMs, 30000);
 });
 
 test('non-cooldown message is not flagged', () => {

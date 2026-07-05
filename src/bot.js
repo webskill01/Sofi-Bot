@@ -384,6 +384,14 @@ async function triggerDrop() {
   const deadline = Date.now() + config.DROP_RESPONSE_TIMEOUT_MS;
   while (Date.now() < deadline) {
     await sleep(500);
+    // Our own drop is on cooldown — no drop is coming, so don't burn the rest
+    // of the timeout. The main loop will wait pendingCooldownMs from here.
+    if (pendingCooldownMs > 0) {
+      pendingDropMsgId = null;
+      channelDropsRemaining--;
+      if (channelDropsRemaining <= 0) rotateChannel();
+      return null;
+    }
     if (pendingDropResult !== null) {
       const result = pendingDropResult;
       pendingDropResult = null;
