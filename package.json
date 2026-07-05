@@ -5,7 +5,8 @@
   "main": "src/bot.js",
   "scripts": {
     "start": "node src/bot.js",
-    "dev": "node --watch src/bot.js"
+    "dev": "node --watch src/bot.js",
+    "test": "node --test"
   },
   "dependencies": {
     "debug": "^4.3.7",

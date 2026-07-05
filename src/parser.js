@@ -33,6 +33,26 @@ const CARD_LINE_PATTERN = /`(\d+)\.\`?\s*.*?\|\s*G\s*[•·]\s*`([^`]*)`\s*\|\s*
 // Fallback: looser pattern
 const CARD_LINE_FALLBACK = /G\s*[•·]\s*`([^`]*)`\s*\|\s*(.+)/g;
 
+/** Parse a wishlist button label: "82" → 82, "2.7K" → 2700, else null. */
+function parseWL(label) {
+  if (label === null || label === undefined) return null;
+  const s = String(label).trim().toUpperCase();
+  if (s === '') return null;
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  const kMatch = s.match(/^(\d+(?:\.\d+)?)K$/);
+  if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
+  return null;
+}
+
+/** Flatten all buttons across component rows, preserving order. */
+function flatButtons(message) {
+  const out = [];
+  for (const row of message.components || []) {
+    for (const b of row.components || []) out.push(b);
+  }
+  return out;
+}
+
 /**
  * Check if a message is a Sofi drop message.
  */
@@ -67,6 +87,11 @@ function isEventItemButton(button) {
 
   const emojiName = (emoji.name || '').toLowerCase();
   if (emojiName === 'dropheart') return false;
+
+  // Event CARDS show their wishlist with the event emoji + a numeric label.
+  // Those are claimed via the decision engine, NOT free items. A genuine free
+  // item (onigiri/shells/coffee giveaway) has no numeric wishlist label.
+  if (parseWL(button.label) !== null) return false;
 
   // Label can be numeric (e.g. "80") or null/empty for event items like onigiri
   // The key identifier is the emoji, not the label
@@ -184,71 +209,24 @@ function parseDropMessage(message) {
     return [];
   }
 
-  // ── Step 2: Extract wishlist counts from non-event-item buttons ────────
-  // Sofi uses abbreviated labels: "0", "82", "2.7K", "1.2K", etc.
-  const parseWL = (label) => {
-    if (!label) return null;
-    const s = label.trim().toUpperCase();
-    if (/^\d+$/.test(s)) return parseInt(s, 10);
-    const kMatch = s.match(/^(\d+(?:\.\d+)?)K$/);
-    if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
-    return null;
-  };
-
-  const wishlistValues = [];
-  for (const row of message.components) {
-    const components = row.components || [];
-    for (const button of components) {
-      // Skip event item buttons (they're handled separately)
-      if (isEventItemButton(button)) continue;
-
-      const wl = parseWL(button.label);
-      if (wl !== null) {
-        wishlistValues.push({
-          wishlist: wl,
-          customId: button.customId || null,
-        });
-      }
-    }
-  }
-
-  // ── Step 3: Combine card lines with wishlist values ────────────────────
-  // Event cards may not have a corresponding dropheart button (their button is the event item)
-  // Normal cards get WL from dropheart buttons in order
-  let wlIdx = 0;
-  for (let i = 0; i < cardLines.length; i++) {
-    const line = cardLines[i];
-
-    if (line.isEventCard) {
-      // Event card WL comes from the event item button label
-      const eventItems = parseEventItems(message);
-      const eventWL = eventItems.length > 0 ? (parseWL(eventItems[0].label) ?? 0) : 0;
-      const eventCustomId = eventItems.length > 0 ? eventItems[0].customId : null;
-
-      cards.push({
-        buttonIndex: eventItems.length > 0 ? eventItems[0].buttonIndex : i,
-        customId: eventCustomId,
-        name: line.name,
-        series: line.series,
-        gen: null,
-        wishlist: eventWL,
-        isEventCard: true,
-      });
-    } else {
-      // Normal card — get WL from next dropheart button
-      const wlData = wishlistValues[wlIdx] || { wishlist: 0, customId: null };
-      wlIdx++;
-
-      cards.push({
-        buttonIndex: wlData.customId ? null : i, // Will use customId for clicking
-        customId: wlData.customId,
-        name: line.name,
-        series: line.series,
-        gen: line.gen,
-        wishlist: wlData.wishlist,
-        isEventCard: false,
-      });
-    }
+  // ── Step 2+3: Map each card line to its OWN button by position ──────────
+  // Drop line `N.` corresponds to flat button index N-1. Free-item lines have
+  // no `G•` so they never become cards; their buttons are skipped here and
+  // handled by parseEventItems(). Event cards read WL from their own button.
+  const buttons = flatButtons(message);
+  for (const line of cardLines) {
+    const idx = line.index; // already (N-1) from the `N.` prefix
+    const btn = buttons[idx];
+    const wl = parseWL(btn && btn.label);
+    cards.push({
+      buttonIndex: idx,
+      customId: (btn && btn.customId) || null,
+      name: line.name,
+      series: line.series,
+      gen: line.gen,
+      wishlist: wl === null ? 0 : wl,
+      isEventCard: line.isEventCard,
+    });
   }
 
   if (cards.length > 0) {
@@ -309,4 +287,53 @@ function parseCooldownMessage(message, sofiBotId) {
   return { onCooldown: true, remainingMs };
 }
 
-module.exports = { isSofiDropMessage, parseDropMessage, parseEventItems, parseCooldownMessage };
+/**
+ * Coffee gained from a free-item grab reply (delta, not total).
+ * Only inspects message content (grab replies are plain text, not embeds),
+ * so the sev shop text ("2000 ☕") can't be misread as a grab.
+ */
+function parseCoffeeGrab(message) {
+  const text = message.content || '';
+  const m = text.match(/(\d[\d,]*)\s*Coffee\b/i);
+  return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
+}
+
+/** True if this is a Sofi `sev` event overview (embed mentions Lottery). */
+function isSevMessage(message) {
+  return (message.embeds || []).some(e => /Lottery/i.test(e.description || '') || /Lottery/i.test(e.title || ''));
+}
+
+/**
+ * Lottery round info from a `sev` embed.
+ * Matches: "Lottery [#3] ( 108 ) | Ends <t:1785083650:R>"
+ * @returns {{round, entries, endsAt, cost}|null}
+ */
+function parseLotteryInfo(message) {
+  const desc = (message.embeds && message.embeds[0] && message.embeds[0].description) || '';
+  const m = desc.match(/Lottery\s*\[#(\d+)\]\s*\(\s*(\d+)\s*\)\s*\|\s*Ends\s*<t:(\d+):[A-Za-z]>/i);
+  if (!m) return null;
+  const costM = desc.match(/cost of\s*\**(\d+)\**\s*(?:<a?:\w+:\d+>|☕|:coffee:)/i);
+  return {
+    round: parseInt(m[1], 10),
+    entries: parseInt(m[2], 10),
+    endsAt: parseInt(m[3], 10) * 1000,
+    cost: costM ? parseInt(costM[1], 10) : config.LOTTERY_COST,
+  };
+}
+
+/** Coffee balance from a `si` → Event-category inventory embed. */
+function parseCoffeeBalance(message) {
+  const desc = (message.embeds && message.embeds[0] && message.embeds[0].description) || '';
+  for (const line of desc.split('\n')) {
+    if (/coffee/i.test(line)) {
+      const num = line.match(/(\d[\d,]*)/);
+      if (num) return parseInt(num[1].replace(/,/g, ''), 10);
+    }
+  }
+  return null;
+}
+
+module.exports = {
+  isSofiDropMessage, parseDropMessage, parseEventItems, parseCooldownMessage,
+  parseCoffeeGrab, parseLotteryInfo, parseCoffeeBalance, isSevMessage, flatButtons,
+};
