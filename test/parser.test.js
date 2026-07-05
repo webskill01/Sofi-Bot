@@ -62,6 +62,34 @@ test('shells drop: cards skip the free item button (regression)', () => {
   assert.deepStrictEqual(cards.map(c => c.customId), ['dh_1', 'dh_3']);
 });
 
+// ── Cooldown parsing (Sofi's bare shorthand) ───────────────────────────────
+const { parseCooldownMessage } = require('../src/parser');
+const cd = (content) => parseCooldownMessage({ author: { id: 'sofi' }, content, embeds: [] }, 'sofi');
+const SOFI = '853629533855809596';
+const cdSofi = (content) => parseCooldownMessage({ author: { id: SOFI }, content, embeds: [] }, SOFI);
+
+test('bare seconds "12s" parses to 12s (+5s buffer)', () => {
+  const r = cd('@Toji Your Drop will be ready in: 12s');
+  assert.strictEqual(r.onCooldown, true);
+  assert.strictEqual(r.remainingMs, 12000 + 5000);
+});
+
+test('compound "2m 25s" parses to 145s (+buffer)', () => {
+  assert.strictEqual(cd('Your Drop will be ready in: 2m 25s').remainingMs, 145000 + 5000);
+});
+
+test('bare minutes "3m" parses to 180s (+buffer)', () => {
+  assert.strictEqual(cd('ready in: 3m').remainingMs, 180000 + 5000);
+});
+
+test('word form "30 seconds" still parses', () => {
+  assert.strictEqual(cd('please wait 30 seconds').remainingMs, 30000 + 5000);
+});
+
+test('non-cooldown message is not flagged', () => {
+  assert.strictEqual(cd('some unrelated text').onCooldown, false);
+});
+
 // ── Future-event-proof: new items work by config/emoji alone ───────────────
 const { parseEventItems: pei } = require('../src/parser');
 const evBtn = (emoji, label) => ({ type: 'BUTTON', style: 'PRIMARY', emoji, label, customId: 'x' });

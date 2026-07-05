@@ -256,21 +256,19 @@ function parseCooldownMessage(message, sofiBotId) {
     return { onCooldown: false, remainingMs: 0 };
   }
 
-  // Try "2m 21s" format first (Sofi's primary format)
-  const msDurationMatch = text.match(/(\d+)\s*m\s*(\d+)\s*s/i);
-  // Then "MM:SS" format
+  // Sofi's live formats: "2m 25s", "12s" (sub-minute), "1m", "5 minutes",
+  // "30 seconds", or "MM:SS". The minute/second regexes each require a digit
+  // immediately before the unit, so they catch bare shorthand ("12s") AND the
+  // full words ("30 seconds") without matching stray m/s inside other words.
   const mmssMatch = text.match(/(\d+):(\d{2})/);
-  // Then separate word forms
-  const minuteMatch = text.match(/(\d+)\s*(?:min|minute)/i);
-  const secMatch = text.match(/(\d+)\s*(?:sec|second)/i);
+  const minMatch = text.match(/(\d+)\s*m(?:in(?:ute)?s?)?\b/i);
+  const secMatch = text.match(/(\d+)\s*s(?:ec(?:ond)?s?)?\b/i);
 
   let remainingMs = 0;
-  if (msDurationMatch) {
-    remainingMs = (parseInt(msDurationMatch[1]) * 60 + parseInt(msDurationMatch[2])) * 1000;
-  } else if (mmssMatch) {
+  if (mmssMatch) {
     remainingMs = (parseInt(mmssMatch[1]) * 60 + parseInt(mmssMatch[2])) * 1000;
   } else {
-    if (minuteMatch) remainingMs += parseInt(minuteMatch[1]) * 60 * 1000;
+    if (minMatch) remainingMs += parseInt(minMatch[1]) * 60 * 1000;
     if (secMatch) remainingMs += parseInt(secMatch[1]) * 1000;
   }
 
