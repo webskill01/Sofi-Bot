@@ -15,3 +15,6 @@ CODE_REVIEW_GRAPH_GUIDE.md
 
 # CRG graph database
 .code-review-graph/
+
+# Local planning docs (specs, plans)
+docs/
