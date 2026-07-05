@@ -1,6 +1,4 @@
 const { createLogger, format, transports } = require('winston');
-const path = require('path');
-const { instanceId } = require('./instance');
 
 const { combine, timestamp, printf, colorize, errors } = format;
 
@@ -8,6 +6,9 @@ const logFormat = printf(({ level, message, timestamp, stack }) => {
   return `${timestamp} [${level}] ${stack || message}`;
 });
 
+// Console only. PM2 captures stdout/stderr into per-instance files
+// (out_file / error_file in ecosystem.config.js) and pm2-logrotate keeps them
+// bounded — so a separate winston file would just be a duplicate.
 const logger = createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: combine(
@@ -16,7 +17,6 @@ const logger = createLogger({
     logFormat
   ),
   transports: [
-    // Console output with colors
     new transports.Console({
       format: combine(
         colorize(),
@@ -24,20 +24,6 @@ const logger = createLogger({
         errors({ stack: true }),
         logFormat
       ),
-    }),
-    // File: all logs (per-instance so multiple bots don't interleave)
-    new transports.File({
-      filename: path.join('logs', `sofi-bot-${instanceId}.log`),
-      maxsize: 5 * 1024 * 1024, // 5MB
-      maxFiles: 5,
-      tailable: true,
-    }),
-    // File: errors only (per-instance)
-    new transports.File({
-      filename: path.join('logs', `error-${instanceId}.log`),
-      level: 'error',
-      maxsize: 2 * 1024 * 1024,
-      maxFiles: 3,
     }),
   ],
 });
