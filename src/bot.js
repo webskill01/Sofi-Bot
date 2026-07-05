@@ -97,10 +97,12 @@ function pickDropCommand() {
   return Math.random() < 0.5 ? 'sdrop' : 'sd';
 }
 
-/** Returns "#channel-name" if cached, else the raw ID. */
+/** Returns "ServerName › #channel-name" if cached, else the raw ID. */
 function getChannelName(id) {
   const ch = client.channels.cache.get(id || activeChannelId);
-  return ch ? `#${ch.name || ch.id}` : `#${id || activeChannelId}`;
+  if (!ch) return `#${id || activeChannelId}`;
+  const chName = `#${ch.name || ch.id}`;
+  return ch.guild?.name ? `${ch.guild.name} › ${chName}` : chName;
 }
 
 function getChannel() {

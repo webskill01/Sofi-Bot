@@ -101,6 +101,8 @@ module.exports = {
   SDAILY_JITTER_MS: 1 * 60 * 60 * 1000,      // 0-1 hour extra delay after base interval
 
   // ─── Lazy Day (Weekly Reduced Activity) ────────────────────────────────────────
+  // Master switch — set false to fully disable the lazy day scheme.
+  LAZY_DAY_ENABLED: false,
   // Once per week, a random weekday has reduced activity to simulate a real player.
   // Weights: [Mon, Tue, Wed, Thu, Fri, Sat, Sun] — higher = more likely to be chosen.
   // Sat/Sun are 0 because real players grind on weekends.

@@ -74,6 +74,15 @@ class Scheduler {
    * @param {Date} nowIST - current Date object adjusted to IST
    */
   _decideLazyDay(todayStr, nowIST) {
+    // Master switch off — never a lazy day.
+    if (!config.LAZY_DAY_ENABLED) {
+      this._isLazyDay = false;
+      this._lazyDayDate = null;
+      this._lazySkippedThisWeek = false;
+      this._lazyWeekStart = todayStr;
+      return;
+    }
+
     // Check if we need a new weekly decision
     const needsNewDecision = !this._lazyWeekStart || this._daysSince(this._lazyWeekStart, todayStr) >= 7;
 
@@ -318,7 +327,8 @@ class Scheduler {
     if (!Array.isArray(saved.afkBreaks) || saved.afkBreaks.length === 0) return;
 
     // Restore lazy day state (persists across the week, not just today)
-    if (saved.lazyWeekStart) {
+    // Master switch off — ignore any persisted lazy day.
+    if (config.LAZY_DAY_ENABLED && saved.lazyWeekStart) {
       this._lazyWeekStart = saved.lazyWeekStart;
       this._lazyDayDate = saved.lazyDayDate || null;
       this._lazySkippedThisWeek = saved.lazySkippedThisWeek || false;
