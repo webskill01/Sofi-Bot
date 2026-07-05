@@ -440,7 +440,7 @@ async function handleDrop(dropMsg) {
       await sleep(delay);
 
       if (config.DRY_RUN) {
-        logger.info(`[DRY RUN] Would click event item button ${item.buttonIndex} (label: "${item.label}")`);
+        logger.info(`[DRY RUN] Would click event item button ${item.buttonIndex + 1} (label: "${item.label}")`);
         continue;
       }
 
@@ -453,7 +453,7 @@ async function handleDrop(dropMsg) {
           } else {
             await dropMsg.clickButton(item.buttonIndex);
           }
-          logger.info(`Claimed event item at button ${item.buttonIndex} (label: "${item.label}")`);
+          logger.info(`Claimed event item at button ${item.buttonIndex + 1} (label: "${item.label}")`);
         }
       } catch (err) {
         logger.error(`Failed to click event item button: ${err.message}`);

@@ -130,7 +130,7 @@ function parseEventItems(message) {
           customId: button.customId || null,
           label: button.label || '',
         });
-        logger.debug(`Found event item button at index ${i}: "${button.label}" (emoji: ${button.emoji?.name})`);
+        logger.debug(`Found event item button at index ${i + 1}: "${button.label}" (emoji: ${button.emoji?.name})`);
       }
     }
   }
