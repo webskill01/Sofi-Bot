@@ -4,13 +4,19 @@ const { Client, Options } = require('discord.js-selfbot-v13');
 const config = require('../config');
 const logger = require('./logger');
 const { loadState, saveState } = require('./stateStore');
-const { isSofiDropMessage, parseDropMessage, parseEventItems, parseCooldownMessage } = require('./parser');
+const {
+  isSofiDropMessage, parseDropMessage, parseEventItems, parseCooldownMessage,
+  parseCoffeeGrab, parseLotteryInfo, isSevMessage, flatButtons,
+} = require('./parser');
 const { selectCard, logDecision } = require('./claimDecision');
+const { shouldEnterLottery } = require('./lottery');
 const scheduler = require('./scheduler');
 const {
   sleep,
   waitReactionDelay,
   getDropInterval,
+  getSevInterval,
+  isLateNight,
   simulateTyping,
   randInt,
 } = require('./humanSim');
@@ -52,6 +58,11 @@ let pendingDropResult = null;
 let sofiRespondedDuringWait = false;  // true if Sofi sent ANY message while we waited (means she's alive)
 let consecutiveSofiTimeouts = 0;      // count of drops where Sofi was completely silent
 let pendingCooldownMs = 0;            // cooldown duration from Sofi's last cooldown reply
+
+// Event currency / lottery
+let coffeeBalance = 0;          // running estimate (seeded from config, +grabs, -entries)
+let lastEnteredRound = null;    // last lottery round we entered (dedup)
+let nextSevTime = 0;            // when the next lottery check is due
 
 // Extra command tracking
 let scdTimesToday = [];       // Planned timestamps for scd commands today
@@ -120,6 +131,39 @@ function getChannel() {
 
 function canGrab() {
   return Date.now() - lastGrabTime >= config.GRAB_COOLDOWN_MS;
+}
+
+/**
+ * Send a command and wait for the next Sofi message in the active channel
+ * that satisfies `predicate`. Uses a scoped listener so it never collides
+ * with the drop-wait globals. Returns the message, or null on timeout.
+ */
+async function sendAndAwait(command, predicate, timeoutMs) {
+  const channel = getChannel();
+  await simulateTyping(command);
+  try {
+    await channel.send(command);
+  } catch (err) {
+    logger.warn(`Failed to send ${command}: ${err.message}`);
+    return null;
+  }
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      client.off('messageCreate', onMsg);
+      clearTimeout(timer);
+      resolve(val);
+    };
+    const onMsg = (m) => {
+      if (m.author.id !== config.SOFI_BOT_ID) return;
+      if (m.channelId !== activeChannelId) return;
+      try { if (predicate(m)) finish(m); } catch { /* ignore */ }
+    };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    client.on('messageCreate', onMsg);
+  });
 }
 
 // -- Extra commands -----------------------------------------------------------
@@ -225,6 +269,86 @@ async function checkSdaily() {
       logger.error(`Failed to send sdaily: ${err.message}`);
     }
   }
+}
+
+/**
+ * Lottery check — sends `sev`, and enters the round if it's new and affordable.
+ * Self-gates on nextSevTime + LOTTERY_ENABLED. Called from the main loop, so it
+ * only runs while the bot is "awake" (not sleeping / AFK) — organic cadence.
+ */
+async function checkLottery() {
+  if (!config.LOTTERY_ENABLED) return;
+  const now = Date.now();
+  if (now < nextSevTime) return;
+  nextSevTime = now + getSevInterval(); // schedule next check regardless of outcome
+
+  if (Math.random() < config.LOTTERY_SKIP_CHANCE) {
+    logger.info('Lottery: skipping this check (human skip)');
+    return;
+  }
+
+  logger.info('Lottery: checking sev...');
+  const sevMsg = await sendAndAwait('sev', isSevMessage, config.SEV_RESPONSE_TIMEOUT_MS);
+  if (!sevMsg) {
+    logger.warn('Lottery: no sev response — will retry next cycle');
+    return;
+  }
+
+  const info = parseLotteryInfo(sevMsg);
+  const decision = shouldEnterLottery({ info, lastEnteredRound, coffeeBalance, nowMs: Date.now(), cfg: config });
+  logger.info(`Lottery: ${decision.reason}`);
+  if (!decision.enter) return;
+
+  await waitReactionDelay(isLateNight());
+
+  if (config.DRY_RUN) {
+    logger.info(`[DRY RUN] Would enter lottery round #${info.round} (cost ${info.cost})`);
+    lastEnteredRound = info.round;
+    return;
+  }
+
+  const btn = flatButtons(sevMsg).find(b => (b.label || '').toLowerCase() === 'lottery');
+  if (!btn) {
+    logger.warn('Lottery: Lottery button not found on sev message');
+    return;
+  }
+
+  try {
+    await sevMsg.clickButton(btn.customId);
+  } catch (err) {
+    logger.error(`Lottery: click failed: ${err.message}`);
+    return;
+  }
+
+  // Confirm via Sofi's reply; if it says insufficient coffee, correct the estimate.
+  const reply = await sendReplyWaiter(sevMsg);
+  if (reply && /not enough|insufficient|don'?t have|need\s+\d+/i.test(reply.content || '')) {
+    logger.warn('Lottery: entry rejected (insufficient coffee) — correcting estimate');
+    coffeeBalance = Math.max(0, info.cost - 1); // below cost so we stop trying until grabs refill
+    saveState({ coffeeBalance });
+    return;
+  }
+
+  lastEnteredRound = info.round;
+  coffeeBalance = Math.max(0, coffeeBalance - info.cost);
+  saveState({ lastEnteredRound, coffeeBalance });
+  logger.info(`Lottery: entered round #${info.round} (−${info.cost} coffee → ~${coffeeBalance})`);
+}
+
+/** Wait briefly for Sofi's follow-up to a lottery click (success/fail text). */
+function sendReplyWaiter(afterMsg) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (done) return; done = true; client.off('messageCreate', onMsg); clearTimeout(t); resolve(v); };
+    const onMsg = (m) => {
+      if (m.author.id !== config.SOFI_BOT_ID) return;
+      if (m.channelId !== activeChannelId) return;
+      if (m.id === afterMsg.id) return;
+      finish(m);
+    };
+    const t = setTimeout(() => finish(null), 8000);
+    client.on('messageCreate', onMsg);
+  });
 }
 
 // -- Drop routine -------------------------------------------------------------
@@ -402,6 +526,16 @@ client.on('messageCreate', async (message) => {
   if (message.author.id !== config.SOFI_BOT_ID) return;
   if (message.channelId !== activeChannelId) return;
 
+  // Coffee grab confirmations arrive as a separate message AFTER we click a
+  // free item — i.e. outside the drop-wait window — so handle them up front.
+  const coffeeGained = parseCoffeeGrab(message);
+  if (coffeeGained !== null && message.mentions?.users?.has(client.user.id)) {
+    coffeeBalance += coffeeGained;
+    logger.info(`Coffee +${coffeeGained} → estimated balance ~${coffeeBalance}`);
+    saveState({ coffeeBalance });
+    return;
+  }
+
   // Ignore ambient Sofi traffic unless this instance is actively waiting for
   // a response to its own drop command. Shared drop channels can contain other
   // users' cooldown replies, which would otherwise create false warnings.
@@ -531,6 +665,7 @@ async function mainLoop() {
     // Run extra commands if due
     await checkScdCommands();
     await checkSdaily();
+    await checkLottery();
 
     // Trigger a drop
     sofiRespondedDuringWait = false;
@@ -619,6 +754,12 @@ client.once('ready', async () => {
     logger.info(`Restored scd plan: ${scdTimesToday.length} commands remaining today`);
   }
   scheduler.restoreState(saved);
+
+  // Restore / seed the coffee ledger
+  coffeeBalance = (saved.coffeeBalance !== undefined) ? saved.coffeeBalance : config.COFFEE_STARTING_BALANCE;
+  lastEnteredRound = saved.lastEnteredRound ?? null;
+  nextSevTime = Date.now() + randInt(2 * 60 * 1000, 10 * 60 * 1000); // first check soon
+  logger.info(`Coffee ledger: ~${coffeeBalance} coffee, last lottery round ${lastEnteredRound ?? 'none'}`);
 
   // Pick the first channel session
   rotateChannel();
