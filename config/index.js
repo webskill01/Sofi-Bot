@@ -52,8 +52,8 @@ module.exports = {
   // Special event items (onigiri, shells, roses) appear as buttons with event emoji.
   // Claiming these does NOT consume grab cooldown — always claim them.
   // Change these names each event season.
-  EVENT_ITEM_NAMES: ['onigiri'],
-  EVENT_ITEM_EMOJIS: ['🍙'],
+  EVENT_ITEM_NAMES: ['onigiri', 'coffee'],
+  EVENT_ITEM_EMOJIS: ['🍙', '☕'],
 
   // ─── Drop Cycle ───────────────────────────────────────────────────────────────
   DROP_COOLDOWN_MS: 8 * 60 * 1000,      // 8 minutes base (Sofi's cooldown)
