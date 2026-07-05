@@ -26,16 +26,21 @@ const logger = require('./logger');
  * NEVER skip — always claim a card from every drop.
  */
 
+/** Numeric gen for comparison; event cards (null gen) sort as high (least rare). */
+function genOf(c) {
+  return (c.gen === null || c.gen === undefined || isNaN(c.gen)) ? Infinity : c.gen;
+}
+
 function lowestGen(cards) {
-  return cards.reduce((best, c) => (c.gen < best.gen ? c : best));
+  return cards.reduce((best, c) => (genOf(c) < genOf(best) ? c : best));
 }
 
 function highestWishlist(cards) {
-  return cards.reduce((best, c) => (c.wishlist > best.wishlist ? c : best));
-}
-
-function randomCard(cards) {
-  return cards[Math.floor(Math.random() * cards.length)];
+  return cards.reduce((best, c) => {
+    if (c.wishlist > best.wishlist) return c;
+    if (c.wishlist === best.wishlist && genOf(c) < genOf(best)) return c; // tie → lower gen
+    return best;
+  });
 }
 
 /**
@@ -104,10 +109,10 @@ function selectCard(cards) {
     return { card: best, reason: `P3 highest wishlist (gen=${genStr}, WL=${best.wishlist})` };
   }
 
-  // ── P4: All WL = 0 — pick random ──────────────────────────────────────
-  const pick = randomCard(cards);
+  // ── P4: All WL = 0 — pick the lowest-gen card (rarest), not random ────
+  const pick = lowestGen(cards);
   const genStr = pick.isEventCard ? 'EVENT' : pick.gen;
-  return { card: pick, reason: `P4 random pick — all WL=0 (gen=${genStr})` };
+  return { card: pick, reason: `P4 lowest-gen — all WL=0 (gen=${genStr})` };
 }
 
 /**
