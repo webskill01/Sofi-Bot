@@ -143,4 +143,17 @@ module.exports = {
   SOFI_DOWNTIME_WAIT_MAX_MS: 2 * 60 * 60 * 1000,  // max downtime pause: 2 hours
   SOFI_PROBE_RETRY_COUNT: 2,                       // extra probe attempts after the first (3 total)
   SOFI_PROBE_INTERVAL_MS: 10 * 60 * 1000,          // 10 min between probe retries
+
+  // ─── Event Lottery / Coffee Currency ──────────────────────────────────────────
+  // Coffee balance is tracked locally: seeded from COFFEE_STARTING_BALANCE, then
+  // +N per free-item grab and -cost per lottery entry. Sofi rejects entries with
+  // insufficient coffee, so the estimate can never cause an overspend.
+  LOTTERY_ENABLED: true,               // master switch for sev + lottery auto-entry
+  LOTTERY_COST: 10,                    // coffee spent per entry (fallback if sev omits it)
+  LOTTERY_MIN_SECONDS_LEFT: 120,       // skip a round with under 2 min left
+  LOTTERY_SKIP_CHANCE: 0.10,           // 10% chance to "forget" a check (human)
+  SEV_INTERVAL_MS: 60 * 60 * 1000,     // ~1h base between lottery checks
+  SEV_JITTER_MS: 30 * 60 * 1000,       // ±30 min Gaussian jitter
+  SEV_RESPONSE_TIMEOUT_MS: 15 * 1000,  // wait up to 15s for a sev reply
+  COFFEE_STARTING_BALANCE: 0,          // seed once from your own `si` reading for an accurate start
 };

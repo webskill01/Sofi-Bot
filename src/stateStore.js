@@ -41,7 +41,12 @@ function saveState(patch) {
   // If the saved date is from a different day, discard everything except
   // lastSdailyTime (which spans days) so stale scd / afk data is cleared.
   if (current.afkDate && current.afkDate !== todayIST) {
-    current = { lastSdailyTime: current.lastSdailyTime };
+    // Currency + lottery state span days — don't wipe them on the daily reset.
+    current = {
+      lastSdailyTime: current.lastSdailyTime,
+      coffeeBalance: current.coffeeBalance,
+      lastEnteredRound: current.lastEnteredRound,
+    };
   }
 
   const next = { ...current, ...patch, savedAt: now };

@@ -106,6 +106,18 @@ function getDropInterval(opts = {}) {
   return config.DROP_COOLDOWN_MS + jitter;
 }
 
+/**
+ * Human cadence for the lottery `sev` check: Gaussian around SEV_INTERVAL_MS,
+ * clamped to ±SEV_JITTER_MS. Combined with the main-loop's sleep/AFK gating
+ * (the loop simply doesn't run these during breaks), this yields organic,
+ * non-uniform check timing rather than a rigid hourly tick.
+ */
+function getSevInterval() {
+  const base = config.SEV_INTERVAL_MS;
+  const jitter = config.SEV_JITTER_MS;
+  return gaussianRandom(base, jitter / 2, base - jitter, base + jitter);
+}
+
 // -- Typing simulation -------------------------------------------------------
 
 /**
@@ -239,6 +251,7 @@ module.exports = {
   sleep,
   waitReactionDelay,
   getDropInterval,
+  getSevInterval,
   simulateTyping,
   getISTTime,
   isLateNight,
