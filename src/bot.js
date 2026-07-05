@@ -10,6 +10,7 @@ const {
 } = require('./parser');
 const { selectCard, logDecision } = require('./claimDecision');
 const { shouldEnterLottery } = require('./lottery');
+const { isOwnResponse } = require('./ownership');
 const scheduler = require('./scheduler');
 const {
   sleep,
@@ -131,6 +132,11 @@ function getChannel() {
 
 function canGrab() {
   return Date.now() - lastGrabTime >= config.GRAB_COOLDOWN_MS;
+}
+
+/** Is this Sofi message a response to our own command? (see ownership.js) */
+function isOurSofiResponse(message) {
+  return isOwnResponse(message, { commandMsgId: pendingDropMsgId, selfUserId: client.user?.id });
 }
 
 /**
@@ -544,12 +550,17 @@ client.on('messageCreate', async (message) => {
   // Any response from Sofi (cooldown, drop, anything) proves she's online
   sofiRespondedDuringWait = true;
 
+  // Only act on responses to OUR OWN command — never another player's drop.
+  if (!isOurSofiResponse(message)) return;
+
   // Check if Sofi is telling us there's a cooldown
   const cooldown = parseCooldownMessage(message, config.SOFI_BOT_ID);
   if (cooldown.onCooldown) {
     logger.warn(`Sofi cooldown detected — drop ready in ${Math.round(cooldown.remainingMs / 1000)}s`);
     // Store the remaining cooldown so the main loop can add it to the next drop interval
     pendingCooldownMs = cooldown.remainingMs;
+    // Our drop won't come — stop waiting so we don't latch onto a foreign drop.
+    waitingForDrop = false;
     return;
   }
 
@@ -565,6 +576,9 @@ client.on('messageUpdate', async (oldMsg, newMsg) => {
   if (!newMsg || newMsg.author?.id !== config.SOFI_BOT_ID) return;
   if (newMsg.channelId !== activeChannelId) return;
   if (!waitingForDrop) return;
+
+  // Only act on an edit of OUR OWN drop — never another player's.
+  if (!isOurSofiResponse(newMsg)) return;
 
   const hadButtons = oldMsg.components && oldMsg.components.length > 0;
   const hasButtons = newMsg.components && newMsg.components.length > 0;
