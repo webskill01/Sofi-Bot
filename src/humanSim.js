@@ -97,8 +97,10 @@ function getDropInterval(opts = {}) {
     return config.LAZY_DROP_COOLDOWN_MS + jitter;
   }
 
-  // Wind-down evening: normal cooldown but slightly higher late chance
-  const lateChance = windDown ? config.LAZY_WIND_DOWN_LATE_CHANCE : config.DROP_LATE_CHANCE;
+  // Wind-down evening: higher late chance. Event mode: lower (tighter grind).
+  const lateChance = windDown
+    ? config.LAZY_WIND_DOWN_LATE_CHANCE
+    : config.EVENT_MODE ? config.EVENT_DROP_LATE_CHANCE : config.DROP_LATE_CHANCE;
   const isLate = Math.random() < lateChance;
   const jitter = isLate
     ? randInt(config.DROP_JITTER_MAX_MS, config.DROP_LATE_JITTER_MAX_MS)
@@ -181,10 +183,12 @@ function isLateNight() {
  * @returns {Array<{ startMinutes: number, durationMs: number, label: string }>}
  */
 function planAfkBreaks(sleepWindow, lazy = false) {
-  const minCount = lazy ? config.LAZY_AFK_MIN_COUNT : config.AFK_MIN_COUNT;
-  const maxCount = lazy ? config.LAZY_AFK_MAX_COUNT : config.AFK_MAX_COUNT;
-  const minDuration = lazy ? config.LAZY_AFK_MIN_DURATION_MS : config.AFK_MIN_DURATION_MS;
-  const maxDuration = lazy ? config.LAZY_AFK_MAX_DURATION_MS : config.AFK_MAX_DURATION_MS;
+  // Event mode (when not a lazy day) = fewer, shorter breaks to grind harder.
+  const event = config.EVENT_MODE && !lazy;
+  const minCount = lazy ? config.LAZY_AFK_MIN_COUNT : event ? config.EVENT_AFK_MIN_COUNT : config.AFK_MIN_COUNT;
+  const maxCount = lazy ? config.LAZY_AFK_MAX_COUNT : event ? config.EVENT_AFK_MAX_COUNT : config.AFK_MAX_COUNT;
+  const minDuration = lazy ? config.LAZY_AFK_MIN_DURATION_MS : event ? config.EVENT_AFK_MIN_DURATION_MS : config.AFK_MIN_DURATION_MS;
+  const maxDuration = lazy ? config.LAZY_AFK_MAX_DURATION_MS : event ? config.EVENT_AFK_MAX_DURATION_MS : config.AFK_MAX_DURATION_MS;
   const count = randInt(minCount, maxCount);
   const breaks = [];
 

@@ -62,6 +62,17 @@ test('shells drop: cards skip the free item button (regression)', () => {
   assert.deepStrictEqual(cards.map(c => c.customId), ['dh_1', 'dh_3']);
 });
 
+test('two free items + one card: both items grabbed, card maps to its own button', () => {
+  const items = parseEventItems(fx.twoFreeItems);
+  assert.deepStrictEqual(items.map(i => i.buttonIndex), [0, 1]); // both free coffees
+  const cards = parseDropMessage(fx.twoFreeItems);
+  assert.strictEqual(cards.length, 1);                 // only the real card is a card
+  assert.strictEqual(cards[0].name, 'Real Card');
+  assert.strictEqual(cards[0].wishlist, 300);
+  assert.strictEqual(cards[0].customId, 'dh_3');       // slot-3 button, not a free item
+  assert.strictEqual(cards[0].isEventCard, false);
+});
+
 // ── Cooldown parsing (Sofi's bare shorthand) ───────────────────────────────
 const { parseCooldownMessage } = require('../src/parser');
 const cd = (content) => parseCooldownMessage({ author: { id: 'sofi' }, content, embeds: [] }, 'sofi');

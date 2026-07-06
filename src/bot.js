@@ -6,7 +6,7 @@ const logger = require('./logger');
 const { loadState, saveState } = require('./stateStore');
 const {
   isSofiDropMessage, parseDropMessage, parseEventItems, parseCooldownMessage,
-  parseCoffeeGrab, parseLotteryInfo, isSevMessage, flatButtons,
+  parseCoffeeGrab, parseLotteryInfo, parseCoffeeBalance, isSevMessage, flatButtons,
 } = require('./parser');
 const { selectCard, logDecision } = require('./claimDecision');
 const { shouldEnterLottery } = require('./lottery');
@@ -134,6 +134,19 @@ function canGrab() {
   return Date.now() - lastGrabTime >= config.GRAB_COOLDOWN_MS;
 }
 
+// Sofi enforces a ~3s global cooldown between ANY two commands. Track the last
+// outbound command and pause before the next so sends never collide (e.g. a
+// lottery `sev` immediately followed by an `sdrop`). Call paceCommand() before
+// sending, markCommand() right after the send lands.
+let lastCommandAt = 0;
+async function paceCommand() {
+  const since = Date.now() - lastCommandAt;
+  if (since < config.COMMAND_MIN_GAP_MS) {
+    await sleep(config.COMMAND_MIN_GAP_MS - since + randInt(200, 800));
+  }
+}
+function markCommand() { lastCommandAt = Date.now(); }
+
 /** Is this Sofi message a response to our own command? (see ownership.js) */
 function isOurSofiResponse(message) {
   return isOwnResponse(message, { commandMsgId: pendingDropMsgId, selfUserId: client.user?.id });
@@ -146,9 +159,11 @@ function isOurSofiResponse(message) {
  */
 async function sendAndAwait(command, predicate, timeoutMs) {
   const channel = getChannel();
+  await paceCommand();
   await simulateTyping(command);
   try {
     await channel.send(command);
+    markCommand();
   } catch (err) {
     logger.warn(`Failed to send ${command}: ${err.message}`);
     return null;
@@ -193,9 +208,10 @@ function planScdTimes() {
   const times = [];
 
   // Waking hours: sleep end to sleep start (lazy day: 10am-8pm, normal: 5am-2am)
+  const normalWakeHour = config.EVENT_MODE ? config.EVENT_SLEEP_END_HOUR_IST : config.SLEEP_END_HOUR_IST;
   const wakeStartMin = lazy
     ? config.LAZY_SLEEP_END_HOUR_IST * 60
-    : config.SLEEP_END_HOUR_IST * 60;
+    : normalWakeHour * 60;
   const wakeEndMin = lazy
     ? config.LAZY_SLEEP_START_HOUR_IST * 60
     : 24 * 60;
@@ -239,8 +255,10 @@ async function checkScdCommands() {
 
     try {
       const channel = getChannel();
+      await paceCommand();
       await simulateTyping('scd');
       await channel.send('scd');
+      markCommand();
       logger.info(`Sent scd command (${scdTimesToday.length} remaining today)`);
       await sleep(randInt(2000, 5000));
     } catch (err) {
@@ -265,8 +283,10 @@ async function checkSdaily() {
   if (now - lastSdailyTime >= interval) {
     try {
       const channel = getChannel();
+      await paceCommand();
       await simulateTyping('sdaily');
       await channel.send('sdaily');
+      markCommand();
       lastSdailyTime = now;
       saveState({ lastSdailyTime });
       logger.info('Sent sdaily command');
@@ -301,6 +321,7 @@ async function checkLottery() {
   }
 
   const info = parseLotteryInfo(sevMsg);
+  await syncCoffeeBalance(); // read the true balance so affordability is exact
   const decision = shouldEnterLottery({ info, lastEnteredRound, coffeeBalance, nowMs: Date.now(), cfg: config });
   logger.info(`Lottery: ${decision.reason}`);
   if (!decision.enter) return;
@@ -341,6 +362,23 @@ async function checkLottery() {
   logger.info(`Lottery: entered round #${info.round} (−${info.cost} coffee → ~${coffeeBalance})`);
 }
 
+/**
+ * Sync the coffee ledger from Sofi's real count via `si <currency>`.
+ * More reliable than the running +grab/−entry estimate. Best-effort: on
+ * timeout or parse miss it silently keeps the current estimate.
+ */
+async function syncCoffeeBalance() {
+  const item = config.EVENT_CURRENCY_NAME;
+  const msg = await sendAndAwait(`si ${item}`, m => parseCoffeeBalance(m) !== null, config.SEV_RESPONSE_TIMEOUT_MS);
+  if (!msg) return;
+  const bal = parseCoffeeBalance(msg);
+  if (bal !== null) {
+    coffeeBalance = bal;
+    saveState({ coffeeBalance });
+    logger.info(`Coffee synced from si ${item}: ~${bal}`);
+  }
+}
+
 /** Wait briefly for Sofi's follow-up to a lottery click (success/fail text). */
 function sendReplyWaiter(afterMsg) {
   return new Promise((resolve) => {
@@ -368,11 +406,13 @@ async function triggerDrop() {
   const dropNum = channelSessionTotal - channelDropsRemaining + 1;
 
   logger.info(`Sending ${command} in ${getChannelName()} (drop ${dropNum}/${channelSessionTotal} in session)`);
+  await paceCommand();
   await simulateTyping(command);
 
   let ourMsg;
   try {
     ourMsg = await channel.send(command);
+    markCommand();
     pendingDropMsgId = ourMsg.id;
   } catch (err) {
     logger.error(`Failed to send ${command}: ${err.message}`);
@@ -742,7 +782,11 @@ client.once('ready', async () => {
   logger.info(`Logged in as ${client.user.tag} (${client.user.id})`);
   logger.info(`Sofi bot ID: ${config.SOFI_BOT_ID}`);
   logger.info(`Dry run mode: ${config.DRY_RUN}`);
-  logger.info(`Lazy day weights: Mon=${config.LAZY_DAY_WEIGHTS[0]} Tue=${config.LAZY_DAY_WEIGHTS[1]} Wed=${config.LAZY_DAY_WEIGHTS[2]} Thu=${config.LAZY_DAY_WEIGHTS[3]} Fri=${config.LAZY_DAY_WEIGHTS[4]}`);
+  logger.info(`Event mode: ${config.EVENT_MODE ? `ON (wake ~${config.EVENT_SLEEP_END_HOUR_IST}am IST, fewer/shorter breaks, lazy day off)` : 'off'}`);
+  logger.info(`Lottery auto-entry: ${config.LOTTERY_ENABLED ? 'ON' : 'OFF'}`);
+  if (!config.EVENT_MODE) {
+    logger.info(`Lazy day weights: Mon=${config.LAZY_DAY_WEIGHTS[0]} Tue=${config.LAZY_DAY_WEIGHTS[1]} Wed=${config.LAZY_DAY_WEIGHTS[2]} Thu=${config.LAZY_DAY_WEIGHTS[3]} Fri=${config.LAZY_DAY_WEIGHTS[4]}`);
+  }
   logger.info(`Configured channels: ${config.CHANNELS.length}`);
 
   // Validate all configured channels are accessible

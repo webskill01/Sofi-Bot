@@ -36,6 +36,17 @@ const shellsFreeItem = msg(
   [dh('5', 1), shell(undefined, 2), dh('9', 3)]
 );
 
+// Two free items + one card in a 3-slot drop: slots 1 & 2 are free coffees
+// (numbered lines, no G•), slot 3 is a real card. All three should be taken:
+// both items grabbed, then the card claimed.
+const twoFreeItems = msg(
+  '<@u> is **dropping** cards\n' +
+  '`1.` :coffee: | Coffees\n' +
+  '`2.` :coffee: | Coffees\n' +
+  '`3.` :firew: | G•`825 ` | Real Card • Some Series',
+  [coffee(undefined, 1), coffee(undefined, 2), dh('300', 3)]
+);
+
 // Plain normal drop, no event content at all.
 const normalDrop = msg(
   '<@u> is **dropping** cards\n' +
@@ -58,4 +69,4 @@ const siEventEmbed = msg('', [], [{
   description: '💳 • 43 • Gen Scratchers\n🍙 • 69 • Onigiri\n☕ • 28 • Coffee',
 }]);
 
-module.exports = { msg, dh, coffee, shell, mixedCoffee, coffeeCardOnly, shellsFreeItem, normalDrop, sevEmbed, siEventEmbed };
+module.exports = { msg, dh, coffee, shell, mixedCoffee, coffeeCardOnly, shellsFreeItem, twoFreeItems, normalDrop, sevEmbed, siEventEmbed };

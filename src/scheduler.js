@@ -74,8 +74,9 @@ class Scheduler {
    * @param {Date} nowIST - current Date object adjusted to IST
    */
   _decideLazyDay(todayStr, nowIST) {
-    // Master switch off — never a lazy day.
-    if (!config.LAZY_DAY_ENABLED) {
+    // Master switch off (or event mode on) — never a lazy day.
+    // Event mode deliberately folds in "no lazy weekday" so the bot grinds.
+    if (!config.LAZY_DAY_ENABLED || config.EVENT_MODE) {
       this._isLazyDay = false;
       this._lazyDayDate = null;
       this._lazySkippedThisWeek = false;
@@ -167,8 +168,9 @@ class Scheduler {
       endMinutes = wakeHour + endJitter;
     } else {
       const endJitter = randInt(-config.SLEEP_JITTER_MIN, config.SLEEP_JITTER_MIN);
+      const endHour = config.EVENT_MODE ? config.EVENT_SLEEP_END_HOUR_IST : config.SLEEP_END_HOUR_IST;
       startMinutes = config.SLEEP_START_HOUR_IST * 60 + startJitter;
-      endMinutes = config.SLEEP_END_HOUR_IST * 60 + endJitter;
+      endMinutes = endHour * 60 + endJitter;
     }
 
     const fmt = (m) => {

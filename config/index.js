@@ -70,6 +70,10 @@ module.exports = {
   DROP_LATE_CHANCE: 0.12,               // 12% chance of a late drop
   DROP_RESPONSE_TIMEOUT_MS: 15 * 1000,  // Wait up to 15s for Sofi to respond
   GRAB_COOLDOWN_MS: 4 * 60 * 1000,      // 4 minutes between grabs
+  // Sofi enforces a ~3s global cooldown between ANY two commands ("Wait Ns
+  // before using any command again"). Every outbound command is paced by at
+  // least this gap so back-to-back sends (e.g. sev → sdrop) never trip it.
+  COMMAND_MIN_GAP_MS: 10000,
 
   // ─── Human Simulation ─────────────────────────────────────────────────────────
   MIN_REACTION_DELAY_MS: 2000,     // Min delay before clicking claim (2s)
@@ -84,6 +88,22 @@ module.exports = {
   SLEEP_START_HOUR_IST: 2,        // Sleep starts at 2am IST
   SLEEP_END_HOUR_IST: 7,          // Sleep ends at 7am IST
   SLEEP_JITTER_MIN: 20,           // ±20 min jitter on sleep start/end
+
+  // ─── Event Mode (Grind Harder During Events) ──────────────────────────────────
+  // Master toggle for "an event is live, be more active" behaviour. When true:
+  //   • shorter sleep window (wake at EVENT_SLEEP_END_HOUR_IST instead of 7am)
+  //   • fewer & shorter AFK breaks (EVENT_AFK_* below)
+  //   • lazy weekday forced OFF (folded into this switch)
+  //   • tighter drop cadence (lower "distracted" late-drop chance)
+  // Flip false when the event ends to return to normal human behaviour.
+  // (Event *items/emojis* are configured separately in EVENT_ITEM_* above.)
+  EVENT_MODE: true,
+  EVENT_SLEEP_END_HOUR_IST: 5,                 // wake ~5am IST during events (vs 7am normal)
+  EVENT_AFK_MIN_COUNT: 1,                       // fewer breaks per day
+  EVENT_AFK_MAX_COUNT: 2,
+  EVENT_AFK_MIN_DURATION_MS: 15 * 60 * 1000,   // shorter breaks: 15 min…
+  EVENT_AFK_MAX_DURATION_MS: 30 * 60 * 1000,   // …up to 30 min
+  EVENT_DROP_LATE_CHANCE: 0.05,                // less "distracted" — tighter grind (vs 0.12)
 
   // ─── AFK / Break Simulation ───────────────────────────────────────────────────
   AFK_MIN_COUNT: 2,                      // Min AFK breaks per day
@@ -155,7 +175,8 @@ module.exports = {
   // Coffee balance is tracked locally: seeded from COFFEE_STARTING_BALANCE, then
   // +N per free-item grab and -cost per lottery entry. Sofi rejects entries with
   // insufficient coffee, so the estimate can never cause an overspend.
-  LOTTERY_ENABLED: true,               // master switch for sev + lottery auto-entry
+  LOTTERY_ENABLED: false,              // master switch for sev + lottery auto-entry (OFF for now)
+  EVENT_CURRENCY_NAME: 'coffee',       // item queried via `si <name>` to sync the true balance
   LOTTERY_COST: 10,                    // coffee spent per entry (fallback if sev omits it)
   LOTTERY_MIN_SECONDS_LEFT: 120,       // skip a round with under 2 min left
   LOTTERY_SKIP_CHANCE: 0.10,           // 10% chance to "forget" a check (human)
