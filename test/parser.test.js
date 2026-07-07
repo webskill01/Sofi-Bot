@@ -73,6 +73,25 @@ test('two free items + one card: both items grabbed, card maps to its own button
   assert.strictEqual(cards[0].isEventCard, false);
 });
 
+// ── Paid tier: N-card drops parse dynamically (3, 4, or more) ──────────────
+test('4-card paid-tier drop: all 4 read, each maps to its own button', () => {
+  const { msg, dh } = fx;
+  const four = msg(
+    '<@u> is **dropping** cards\n' +
+    '`1.` :windw: | G•`100 ` | A • X\n' +
+    '`2.` :firew: | G•`50  ` | B • Y\n' +
+    '`3.` :earthw: | G•`200 ` | C • Z\n' +
+    '`4.` :icew: | G•`8   ` | D • W',
+    [dh('3', 1), dh('7', 2), dh('1', 3), dh('42', 4)]
+  );
+  const cards = parseDropMessage(four);
+  assert.strictEqual(cards.length, 4);
+  assert.deepStrictEqual(cards.map(c => c.buttonIndex), [0, 1, 2, 3]);
+  assert.deepStrictEqual(cards.map(c => c.customId), ['dh_1', 'dh_2', 'dh_3', 'dh_4']);
+  assert.deepStrictEqual(cards.map(c => c.wishlist), [3, 7, 1, 42]);
+  assert.strictEqual(cards[3].gen, 8); // the 4th card is fully read
+});
+
 // ── Cooldown parsing (Sofi's bare shorthand) ───────────────────────────────
 const { parseCooldownMessage } = require('../src/parser');
 const cd = (content) => parseCooldownMessage({ author: { id: 'sofi' }, content, embeds: [] }, 'sofi');

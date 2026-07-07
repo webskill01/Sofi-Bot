@@ -540,17 +540,20 @@ async function handleDrop(dropMsg) {
 
   // Click the claim button
   try {
-    const targetRow = dropMsg.components[0];
+    // Look up across ALL button rows, not just row 0 — a 4-card (paid-tier)
+    // drop plus a Cafe/event button can overflow into a second row, and the
+    // parser's buttonIndex is already a flat index across rows.
+    const allButtons = flatButtons(dropMsg);
     let button;
 
     // Try to find button by customId first
     if (decision.card.customId) {
-      button = targetRow?.components.find(b => b.customId === decision.card.customId);
+      button = allButtons.find(b => b.customId === decision.card.customId);
     }
 
     // Fallback to index
     if (!button && decision.card.buttonIndex !== null) {
-      button = targetRow?.components[decision.card.buttonIndex];
+      button = allButtons[decision.card.buttonIndex];
     }
 
     if (!button) {
@@ -561,8 +564,7 @@ async function handleDrop(dropMsg) {
     if (button.customId) {
       await dropMsg.clickButton(button.customId);
     } else {
-      const idx = targetRow.components.indexOf(button);
-      await dropMsg.clickButton(idx);
+      await dropMsg.clickButton(allButtons.indexOf(button));
     }
 
     lastGrabTime = Date.now();
