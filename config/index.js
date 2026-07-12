@@ -18,14 +18,14 @@ module.exports = {
         '1233860234439823391',
         '1337472845906710689',
         '1337472881881514015',
-        '1037280351392903178',
-        '1037280651512119327',
+        '1081597798434213999',
+        '1119897222121799750',
         '981737112372142110',
-        '939811010808782868',
+        // '939811010808782868',
         '941326108358475817',
         '870278822786924634',
-        '1118531400258302063',
-        '959046220658114570',
+        // '1118531400258302063',
+        // '959046220658114570',
         '1353032909761548299',
         '1359154264471113879',
       ],
@@ -76,12 +76,12 @@ module.exports = {
   COMMAND_MIN_GAP_MS: 10000,
 
   // ─── Human Simulation ─────────────────────────────────────────────────────────
-  MIN_REACTION_DELAY_MS: 2000,     // Min delay before clicking claim (2s)
-  MAX_REACTION_DELAY_MS: 8000,    // Max delay before clicking claim (8s)
+  MIN_REACTION_DELAY_MS: 1000,     // Min delay before clicking claim (2s)
+  MAX_REACTION_DELAY_MS: 4000,    // Max delay before clicking claim (8s)
   LATE_MIN_REACTION_MS: 8000,      // Slower at night: min 8s
   LATE_MAX_REACTION_MS: 30000,     // Slower at night: max 30s
   EVENT_ITEM_DELAY_MIN_MS: 1000,   // Min delay before clicking event item (1s)
-  EVENT_ITEM_DELAY_MAX_MS: 3000,   // Max delay before clicking event item (3s)
+  EVENT_ITEM_DELAY_MAX_MS: 2000,   // Max delay before clicking event item (3s)
 
   // ─── Sleep Window (IST = UTC+5:30) ────────────────────────────────────────────
   // Bot only sleeps during this window. Runs 24/7 otherwise with breaks.
