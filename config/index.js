@@ -21,11 +21,11 @@ module.exports = {
         '1037280351392903178',
         '1037280651512119327',
         '981737112372142110',
-        // '939811010808782868',
+        '939811010808782868',
         '941326108358475817',
         '870278822786924634',
-        // '1118531400258302063',
-        // '959046220658114570',
+        '1118531400258302063',
+        '959046220658114570',
         '1353032909761548299',
         '1359154264471113879',
       ],
@@ -76,8 +76,8 @@ module.exports = {
   COMMAND_MIN_GAP_MS: 10000,
 
   // ─── Human Simulation ─────────────────────────────────────────────────────────
-  MIN_REACTION_DELAY_MS: 1000,     // Min delay before clicking claim (2s)
-  MAX_REACTION_DELAY_MS: 4000,    // Max delay before clicking claim (8s)
+  MIN_REACTION_DELAY_MS: 2000,     // Min delay before clicking claim (2s)
+  MAX_REACTION_DELAY_MS: 8000,    // Max delay before clicking claim (8s)
   LATE_MIN_REACTION_MS: 8000,      // Slower at night: min 8s
   LATE_MAX_REACTION_MS: 30000,     // Slower at night: max 30s
   EVENT_ITEM_DELAY_MIN_MS: 1000,   // Min delay before clicking event item (1s)
@@ -97,7 +97,7 @@ module.exports = {
   //   • tighter drop cadence (lower "distracted" late-drop chance)
   // Flip false when the event ends to return to normal human behaviour.
   // (Event *items/emojis* are configured separately in EVENT_ITEM_* above.)
-  EVENT_MODE: true,
+  EVENT_MODE: false,
   EVENT_SLEEP_END_HOUR_IST: 5,                 // wake ~5am IST during events (vs 7am normal)
   EVENT_AFK_MIN_COUNT: 1,                       // fewer breaks per day
   EVENT_AFK_MAX_COUNT: 2,
