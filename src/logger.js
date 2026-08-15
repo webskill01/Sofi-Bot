@@ -2,8 +2,12 @@ const { createLogger, format, transports } = require('winston');
 
 const { combine, timestamp, printf, colorize, errors } = format;
 
+// Which account these logs belong to — set once on ready via logger.setUser().
+// ponytail: module-level string, one client per process.
+let user = '';
+
 const logFormat = printf(({ level, message, timestamp, stack }) => {
-  return `${timestamp} [${level}] ${stack || message}`;
+  return `${timestamp} [${level}]${user} ${stack || message}`;
 });
 
 // Console only. PM2 captures stdout/stderr into per-instance files
@@ -27,5 +31,7 @@ const logger = createLogger({
     }),
   ],
 });
+
+logger.setUser = (name) => { user = name ? ` [${name}]` : ''; };
 
 module.exports = logger;

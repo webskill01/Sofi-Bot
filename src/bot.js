@@ -781,6 +781,7 @@ async function mainLoop() {
 // -- Client events ------------------------------------------------------------
 
 client.once('ready', async () => {
+  logger.setUser(client.user.username);
   logger.info(`Logged in as ${client.user.tag} (${client.user.id})`);
   logger.info(`Sofi bot ID: ${config.SOFI_BOT_ID}`);
   logger.info(`Dry run mode: ${config.DRY_RUN}`);
