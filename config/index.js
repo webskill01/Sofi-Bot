@@ -97,7 +97,7 @@ module.exports = {
   //   • tighter drop cadence (lower "distracted" late-drop chance)
   // Flip false when the event ends to return to normal human behaviour.
   // (Event *items/emojis* are configured separately in EVENT_ITEM_* above.)
-  EVENT_MODE: false,
+  EVENT_MODE: true,
   EVENT_SLEEP_END_HOUR_IST: 5,                 // wake ~5am IST during events (vs 7am normal)
   EVENT_AFK_MIN_COUNT: 1,                       // fewer breaks per day
   EVENT_AFK_MAX_COUNT: 2,
