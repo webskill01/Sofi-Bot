@@ -183,7 +183,7 @@ function logRow(line) {
   const [, day, time, level, text] = m;
   // Long lines ("CLAIM → x | P3 ... | Drop: ...") read better as headline + detail.
   const [msg, ...rest] = text.split(' | ');
-  const kind = level === 'error' || /Failed|401|TOKEN INVALID/.test(text) ? 'error'
+  const kind = level === 'error' || /Failed|401: Unauthorized|TOKEN INVALID/.test(text) ? 'error'
     : level === 'warn' ? 'warn' : /^(CLAIM →|Claimed )/.test(text) ? 'claim' : 'info';
   return { kind, day, node: h('div', { class: `log ${kind}` }, h('time', {}, time), h('div', { class: 'msg' }, msg),
     rest.length ? h('div', { class: 'detail' }, rest.join(' · ')) : null) };
