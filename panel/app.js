@@ -66,10 +66,12 @@ async function act(btn, fn, okMsg) {
 }
 
 // ── sheet (bottom sheet on phones, dialog on desktop) ───────────────────────
-function openSheet(title, sub, body, foot) {
+function openSheet(title, sub, body, foot, color) {
+  sheet.style.setProperty('--c', color || '');
   sheet.replaceChildren(
     h('div', { class: 'grabber' }),
     h('div', { class: 'sheet-head' },
+      color ? h('span', { class: 'dot' }) : null,
       h('div', { class: 'title' }, title, sub ? h('div', { class: 'sub' }, sub) : null),
       h('button', { class: 'ghost icon', 'aria-label': 'Close', onclick: () => sheet.close() }, icon('x'))),
     h('div', { class: 'sheet-body' }, body),
@@ -104,16 +106,30 @@ function fmtUptime(ms) {
 }
 
 function statusPill(a) {
-  if (a.deadToken) return h('span', { class: 'pill bad' }, a.status === 'online' ? 'Dead token' : 'Stopped · token');
-  if (a.status === 'online') return h('span', { class: 'pill ok' }, 'Online');
-  return h('span', { class: a.status === 'stopped' ? 'pill warn' : 'pill bad' }, a.status[0].toUpperCase() + a.status.slice(1));
+  const [cls, text] = a.deadToken ? ['bad', 'Token dead']
+    : a.status === 'online' ? ['ok', 'Running']
+      : a.status === 'stopped' ? ['warn', 'Stopped'] : ['bad', a.status[0].toUpperCase() + a.status.slice(1)];
+  return h('span', { class: `status ${cls}` }, h('i'), text);
+}
+
+// One colour per bot, handed out in order so no two bots share one.
+const COLORS = ['#a78bfa', '#22d3ee', '#f472b6', '#34d399', '#fbbf24', '#60a5fa', '#fb923c', '#a3e635', '#e879f9'];
+
+// Only speak up when something needs attention, and say it in plain words.
+function alertFor(a) {
+  if (a.deadToken) return h('div', { class: 'alert bad' }, h('b', {}, 'Token no longer works'),
+    h('span', {}, 'Discord rejected it. Tap Token below and paste a fresh one.'));
+  if (a.status !== 'online') return h('div', { class: 'alert warn' }, h('b', {}, a.status === 'stopped' ? 'Bot is stopped' : `Bot ${a.status}`),
+    h('span', {}, a.lastError || 'Press Start to run it again.'));
+  if (a.lastError) return h('div', { class: 'alert warn' }, h('b', {}, 'Error since the last claim'), h('span', {}, a.lastError));
+  return null;
 }
 
 const label = (key) => key.toLowerCase().replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()).replace(/\bms\b/, '(ms)').replace(/\bist\b/, 'IST').replace(/\bwl\b/g, 'WL');
 
 // ── settings form ────────────────────────────────────────────────────────────
 // values: current override object. inherited: what a blank field falls back to.
-function settingsSheet(title, sub, values, inherited, onSave) {
+function settingsSheet(title, sub, values, inherited, onSave, color) {
   const inputs = {};
   const field = ([key, type]) => {
     const has = key in values;
@@ -141,7 +157,7 @@ function settingsSheet(title, sub, values, inherited, onSave) {
     h('div', { class: 'group' }, 'Numbers'),
     h('div', { class: 'fields two' }, entries.filter(e => e[1] !== 'boolean').map(field)),
     h('p', { class: 'note' }, 'Leave a field blank to inherit.'),
-  ], [h('button', { onclick: () => sheet.close() }, 'Cancel'), save]);
+  ], [h('button', { onclick: () => sheet.close() }, 'Cancel'), save], color);
 }
 
 // ── account card ─────────────────────────────────────────────────────────────
@@ -154,21 +170,56 @@ function tokenSheet(box, a) {
   openSheet('Change token', `${a.user || a.name} · ${box}`, [
     h('label', { class: 'field' }, h('span', { class: 'label' }, 'New token'), input),
     h('p', { class: 'note' }, 'Must be the same Discord account. Copy it, then close the tab — logging out kills the token.'),
-  ], [h('button', { onclick: () => sheet.close() }, 'Cancel'), save]);
+  ], [h('button', { onclick: () => sheet.close() }, 'Cancel'), save], a.color);
   input.focus();
 }
 
+// pm2 line: "2026-11-13 21:43:15: 2026-11-13 21:43:15 [info] [user] message"
+const LOG_RE = /^(?:\S+ \S+: )?(\d{4}-\d\d-\d\d) (\d\d:\d\d):\d\d \[(\w+)\] (?:\[[^\]]+\] )?(.*)$/;
+
+function logRow(line) {
+  const m = line.match(LOG_RE);
+  if (!m) return { kind: 'raw', node: h('div', { class: 'log raw' }, line) };
+  const [, day, time, level, text] = m;
+  // Long lines ("CLAIM → x | P3 ... | Drop: ...") read better as headline + detail.
+  const [msg, ...rest] = text.split(' | ');
+  const kind = level === 'error' || /Failed|401|TOKEN INVALID/.test(text) ? 'error'
+    : level === 'warn' ? 'warn' : /^(CLAIM →|Claimed )/.test(text) ? 'claim' : 'info';
+  return { kind, day, node: h('div', { class: `log ${kind}` }, h('time', {}, time), h('div', { class: 'msg' }, msg),
+    rest.length ? h('div', { class: 'detail' }, rest.join(' · ')) : null) };
+}
+
 function logsSheet(box, a) {
-  const pre = h('pre', {}, 'Loading…');
+  const list = h('div', { class: 'logs' }, h('div', { class: 'note' }, 'Loading…'));
+  let rows = [];
+  let filter = 'all';
+  const draw = () => {
+    const out = [];
+    let lastDay = null;
+    for (const r of rows.filter(r => filter === 'all' || r.kind === filter)) {
+      if (r.day && r.day !== lastDay) { out.push(h('div', { class: 'day' }, r.day)); lastDay = r.day; }
+      out.push(r.node);
+    }
+    list.replaceChildren(...(out.length ? out : [h('div', { class: 'note' }, 'Nothing here.')]));
+    list.parentElement.scrollTop = list.parentElement.scrollHeight;
+  };
+  const chips = [['all', 'All'], ['claim', 'Claims'], ['error', 'Errors']].map(([k, text]) => {
+    const b = h('button', { class: k === filter ? 'on' : '', onclick: () => {
+      filter = k;
+      for (const c of chips) c.classList.toggle('on', c === b);
+      draw();
+    } }, text);
+    return b;
+  });
   const reload = async () => {
     try {
       const r = await api(`/api/logs?${new URLSearchParams({ box, name: a.name })}`);
-      pre.textContent = r.lines.join('\n') || '(empty)';
-      pre.parentElement.scrollTop = pre.parentElement.scrollHeight;
-    } catch (e) { pre.textContent = e.message; }
+      rows = r.lines.filter(Boolean).map(logRow);
+      draw();
+    } catch (e) { list.replaceChildren(h('div', { class: 'note' }, e.message)); }
   };
-  openSheet('Logs', `${a.user || a.name} · last 50 lines`, pre,
-    [h('button', { onclick: (e) => act(e.currentTarget, reload) }, icon('refresh'), 'Reload')]);
+  openSheet('Logs', `${a.user || a.name} · last 50 lines`, [h('div', { class: 'filters' }, chips), list],
+    [h('button', { onclick: (e) => act(e.currentTarget, reload) }, icon('refresh'), 'Reload')], a.color);
   reload();
 }
 
@@ -182,23 +233,27 @@ function accountCard(box, a, globalValues) {
   const overrides = Object.keys(a.overrides).length;
   const who = a.user || a.name;
 
-  return h('div', { class: 'card acc' },
+  const color = a.color;
+  const down = a.deadToken || !running;
+
+  return h('div', { class: `card acc${down ? ' down' : ''}`, style: `--c:${color}` },
     h('div', { class: 'acc-head' },
       h('div', { class: 'avatar' }, who.replace(/^[^a-z0-9]+/i, '')[0]?.toUpperCase() || '?'),
-      h('div', { class: 'who' }, h('div', { class: 'name' }, who), h('div', { class: 'sub' }, `${a.name} · ${a.instance} · ${a.token}`)),
+      h('div', { class: 'who' }, h('div', { class: 'name' }, who),
+        h('div', { class: 'chips' }, h('span', { class: 'chip' }, a.instance), h('span', { class: 'chip' }, a.name), h('span', { class: 'chip', title: 'token' }, a.token.slice(0, 8)))),
       statusPill(a)),
     h('div', { class: 'stats' },
-      h('div', { class: 'stat' }, h('div', { class: 'label' }, 'Claims today'), h('div', { class: 'value' }, String(a.claimsToday))),
-      h('div', { class: 'stat' }, h('div', { class: 'label' }, 'Last claim'), h('div', { class: 'value', title: a.lastClaim || '' }, a.lastClaim ? a.lastClaim.replace(/^\d{4}-\d\d-\d\d /, '') : '—')),
+      h('div', { class: 'stat' }, h('div', { class: 'label' }, 'Today'), h('div', { class: 'value big' }, String(a.claimsToday))),
+      h('div', { class: 'stat' }, h('div', { class: 'label' }, 'Last claim'), h('div', { class: 'value', title: a.lastClaim || '' }, a.lastClaim ? a.lastClaim.replace(/^\d{4}-\d\d-\d\d (\d\d:\d\d):\d\d/, '$1') : '—')),
       h('div', { class: 'stat' }, h('div', { class: 'label' }, 'Uptime'), h('div', { class: 'value', title: `${a.restarts} restarts · ${Math.round(a.memory / 1048576)} MB` }, fmtUptime(a.uptimeMs)))),
-    a.lastError ? h('div', { class: 'errline' }, a.lastError) : null,
+    alertFor(a),
     h('div', { class: 'actions' },
-      running ? btn('Restart', 'restart', 'grow', 'restart') : btn('Start', 'start', 'primary grow', 'play'),
-      running ? btn('Stop', 'stop', 'danger grow', 'stop') : null),
+      running ? btn('Restart', 'restart', '', 'restart') : btn('Start', 'start', 'primary', 'play'),
+      running ? btn('Stop', 'stop', 'danger', 'stop') : null),
     h('div', { class: 'tools' },
       h('button', { class: 'ghost sm', onclick: () => tokenSheet(box, a) }, icon('key'), 'Token'),
       h('button', { class: 'ghost sm', onclick: () => settingsSheet('Account settings', `${who} · overrides global`,
-        a.overrides, { ...data.defaults, ...globalValues }, (values) => api('/api/settings', { box, scope: a.instance, values })) },
+        a.overrides, { ...data.defaults, ...globalValues }, (values) => api('/api/settings', { box, scope: a.instance, values }), color) },
       icon('sliders'), overrides ? `Settings (${overrides})` : 'Settings'),
       h('button', { class: 'ghost sm', onclick: () => logsSheet(box, a) }, icon('logs'), 'Logs')));
 }
@@ -227,6 +282,7 @@ function render() {
   const eventOn = 'EVENT_MODE' in global ? global.EVENT_MODE : data.defaults.EVENT_MODE;
   const mismatch = data.boxes.some(b => !b.error && JSON.stringify(b.global || {}) !== JSON.stringify(global));
   const all = data.boxes.flatMap(b => b.accounts);
+  all.forEach((a, i) => { a.color = COLORS[i % COLORS.length]; });
   const working = all.filter(a => a.status === 'online' && !a.deadToken).length;
   const claims = all.reduce((s, a) => s + (a.claimsToday || 0), 0);
 
@@ -245,16 +301,16 @@ function render() {
       h('div', { class: 'kpis' },
         h('div', { class: 'card kpi' }, h('div', { class: 'label' }, 'Working'), h('div', { class: 'value' }, String(working), h('small', {}, ` / ${all.length}`))),
         h('div', { class: 'card kpi' }, h('div', { class: 'label' }, 'Claims today'), h('div', { class: 'value' }, String(claims))),
-        h('div', { class: 'card event' },
+        h('div', { class: `card event${eventOn ? ' on' : ''}` },
           h('div', { class: 'text' }, h('div', { class: 'name' }, `Event mode ${eventOn ? 'on' : 'off'}`),
-            h('div', { class: 'sub', style: 'white-space:normal' }, 'Claim rules change within 30s; sleep schedule from tomorrow (restart to apply now).'),
+            h('div', { class: 'sub' }, 'Claim rules change within 30s; sleep schedule from tomorrow (restart to apply now).'),
             mismatch ? h('div', { class: 'warnline' }, 'Servers have different global settings — save once to sync.') : null),
           sw)),
-      ...data.boxes.flatMap(b => [
-        h('h2', {}, `${b.box} VPS`, b.error ? null : h('span', { class: 'count' }, `${b.accounts.length} account${b.accounts.length === 1 ? '' : 's'}`),
+      ...data.boxes.map(b => h('section', { class: 'server' },
+        h('div', { class: 'server-head' }, h('span', { class: 'tag' }, `${b.box} VPS`),
+          b.error ? null : h('span', { class: 'count' }, `${b.accounts.filter(a => a.status === 'online' && !a.deadToken).length}/${b.accounts.length} running`),
           b.error ? null : h('button', { class: 'sm', onclick: () => addAccountSheet(b.box, b.accounts) }, icon('plus'), 'Add')),
-        b.error ? h('div', { class: 'card boxerr' }, b.error) : h('div', { class: 'grid' }, b.accounts.map(a => accountCard(b.box, a, global))),
-      ])));
+        b.error ? h('div', { class: 'card boxerr' }, b.error) : h('div', { class: 'grid' }, b.accounts.map(a => accountCard(b.box, a, global)))))));
 }
 
 async function load(auto = false) {

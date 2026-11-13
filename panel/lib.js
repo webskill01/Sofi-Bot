@@ -48,6 +48,7 @@ const AUTH_ERR = /401: Unauthorized|TOKEN INVALID|invalid token was provided|TOK
  * Status from a bot's out-log text. `today` is YYYY-MM-DD in the box's local time,
  * which is what pm2 stamps the log lines with.
  * deadToken: an auth error since the last start, with no claim after it.
+ * lastError: only an error not yet followed by a claim or a restart.
  */
 function parseStatus(text, today) {
   const lines = stripAnsi(text).split('\n').filter(Boolean);
@@ -56,10 +57,11 @@ function parseStatus(text, today) {
   for (const line of lines) {
     const user = line.match(/\] \[([^\]]+)\] /);
     if (user) s.user = user[1];
-    if (line.includes('Starting Sofi Auto-Claim Bot')) sinceStart = [];
+    if (line.includes('Starting Sofi Auto-Claim Bot')) { sinceStart = []; s.lastError = null; }
     sinceStart.push(line);
     if (line.includes('CLAIM →')) {
       if (line.startsWith(today)) s.claimsToday++;
+      s.lastError = null; // a claim after an error means it recovered
       const card = line.match(/CLAIM → "([^"]*)"/);
       s.lastClaim = `${line.slice(0, 19)} ${card ? card[1] : ''}`.trim();
     }

@@ -75,6 +75,10 @@ test('parseStatus reads user, claims today, last claim and dead token', () => {
 
   const recovered = dead + `\n2026-11-13 11:05:00: 2026-11-13 11:05:00 [${I}] Starting Sofi Auto-Claim Bot...`;
   assert.strictEqual(lib.parseStatus(recovered, '2026-11-13').deadToken, false);
+  assert.strictEqual(lib.parseStatus(recovered, '2026-11-13').lastError, null);
+
+  const claimedAfter = dead + `\n2026-11-13 11:10:00: 2026-11-13 11:10:00 [${I}] [duck] CLAIM → "Mia" | P3`;
+  assert.strictEqual(lib.parseStatus(claimedAfter, '2026-11-13').lastError, null);
 });
 
 test('writeAccounts/readAccounts round-trip atomically', () => {
