@@ -199,11 +199,17 @@ function sessionOk(req) {
   const exp = m && sessions.get(m[1]);
   return !!exp && exp > Date.now();
 }
+// The per-IP limit trusts CF-Connecting-IP, which a direct-to-origin caller could fake,
+// so there is also a global cap: 20 wrong PINs in 15 min locks every login for 15 min.
+const globalFails = { n: 0, since: 0, until: 0 };
 function login(req, res, pin) {
   const ip = clientIp(req);
   const f = fails.get(ip) || { n: 0, until: 0 };
-  if (f.until > Date.now()) throw new HttpError(429, 'too many tries — wait 15 minutes');
+  const now = Date.now();
+  if (f.until > now || globalFails.until > now) throw new HttpError(429, 'too many tries — wait 15 minutes');
   if (!env.PANEL_PIN || !safeEqual(String(pin || ''), env.PANEL_PIN)) {
+    if (now - globalFails.since > 15 * 60 * 1000) { globalFails.n = 0; globalFails.since = now; }
+    if (++globalFails.n >= 20) globalFails.until = now + 15 * 60 * 1000;
     f.n += 1;
     if (f.n >= 5) { f.n = 0; f.until = Date.now() + 15 * 60 * 1000; }
     fails.set(ip, f);
