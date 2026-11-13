@@ -12,6 +12,8 @@ const { selectCard, logDecision } = require('./claimDecision');
 const { shouldEnterLottery } = require('./lottery');
 const { isOwnResponse } = require('./ownership');
 const scheduler = require('./scheduler');
+const overrides = require('./overrides');
+const { instanceId } = require('./instance');
 const {
   sleep,
   waitReactionDelay,
@@ -30,6 +32,24 @@ if (!config.TOKEN) {
 if (!config.CHANNELS || config.CHANNELS.length === 0) {
   logger.error('No CHANNELS configured in config/index.js — cannot start');
   process.exit(1);
+}
+
+// -- Dead token: stop for good instead of looping ---------------------------
+// A token killed while connected keeps the gateway alive, but every send 401s
+// and would read as "Sofi down". Restarting can't fix a dead token, so under
+// pm2 we `pm2 stop` ourselves (exiting alone would just crash-loop).
+// 403 is deliberately excluded — that's a channel permission, not the token.
+const isAuthError = (err) => err?.httpStatus === 401 || err?.code === 'TOKEN_INVALID';
+let stoppingForToken = false;
+function stopForInvalidToken(err) {
+  if (stoppingForToken) return;
+  stoppingForToken = true;
+  logger.error(`TOKEN INVALID (${err?.message || err}) — replace TOKEN for ${process.env.name || 'this bot'} and restart. Stopping.`);
+  if (process.env.pm_id !== undefined) {
+    require('child_process').spawn('pm2', ['stop', String(process.env.pm_id)], { detached: true, stdio: 'ignore', shell: true }).unref();
+  } else {
+    process.exit(1);
+  }
 }
 
 // -- Bot state ----------------------------------------------------------------
@@ -165,6 +185,7 @@ async function sendAndAwait(command, predicate, timeoutMs) {
     await channel.send(command);
     markCommand();
   } catch (err) {
+    if (isAuthError(err)) stopForInvalidToken(err);
     logger.warn(`Failed to send ${command}: ${err.message}`);
     return null;
   }
@@ -262,6 +283,7 @@ async function checkScdCommands() {
       logger.info(`Sent scd command (${scdTimesToday.length} remaining today)`);
       await sleep(randInt(2000, 5000));
     } catch (err) {
+      if (isAuthError(err)) stopForInvalidToken(err);
       logger.error(`Failed to send scd: ${err.message}`);
     }
   }
@@ -292,6 +314,7 @@ async function checkSdaily() {
       logger.info('Sent sdaily command');
       await sleep(randInt(3000, 8000));
     } catch (err) {
+      if (isAuthError(err)) stopForInvalidToken(err);
       logger.error(`Failed to send sdaily: ${err.message}`);
     }
   }
@@ -415,6 +438,7 @@ async function triggerDrop() {
     markCommand();
     pendingDropMsgId = ourMsg.id;
   } catch (err) {
+    if (isAuthError(err)) stopForInvalidToken(err);
     logger.error(`Failed to send ${command}: ${err.message}`);
     pendingDropMsgId = null;
     return null;
@@ -787,6 +811,9 @@ client.once('ready', async () => {
   logger.info(`Dry run mode: ${config.DRY_RUN}`);
   logger.info(`Event mode: ${config.EVENT_MODE ? `ON (wake ~${config.EVENT_SLEEP_END_HOUR_IST}am IST, fewer/shorter breaks, lazy day off)` : 'off'}`);
   logger.info(`Lottery auto-entry: ${config.LOTTERY_ENABLED ? 'ON' : 'OFF'}`);
+  // Panel settings: pick up overrides.json edits live (checked every 30s).
+  overrides.watch(config, config.DEFAULTS, instanceId, (changed) =>
+    logger.info(`Settings updated from panel: ${changed.join(', ')}`));
   if (!config.EVENT_MODE) {
     logger.info(`Lazy day weights: Mon=${config.LAZY_DAY_WEIGHTS[0]} Tue=${config.LAZY_DAY_WEIGHTS[1]} Wed=${config.LAZY_DAY_WEIGHTS[2]} Thu=${config.LAZY_DAY_WEIGHTS[3]} Fri=${config.LAZY_DAY_WEIGHTS[4]}`);
   }
@@ -878,4 +905,8 @@ process.on('unhandledRejection', (err) => {
 // -- Start --------------------------------------------------------------------
 
 logger.info('Starting Sofi Auto-Claim Bot...');
-client.login(config.TOKEN);
+client.login(config.TOKEN).catch((err) => {
+  if (isAuthError(err)) return stopForInvalidToken(err);
+  logger.error(`Login failed: ${err.message}`);
+  process.exit(1);
+});

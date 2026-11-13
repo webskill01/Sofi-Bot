@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-module.exports = {
+const config = {
   // ─── Discord ─────────────────────────────────────────────────────────────────
   TOKEN: process.env.TOKEN,
   SOFI_BOT_ID: process.env.SOFI_BOT_ID || '853629533855809596',
@@ -185,3 +185,12 @@ module.exports = {
   SEV_RESPONSE_TIMEOUT_MS: 15 * 1000,  // wait up to 15s for a sev reply
   COFFEE_STARTING_BALANCE: 0,          // seed once from your own `si` reading for an accurate start
 };
+
+// Panel overrides (overrides.json) layered on top of the defaults above.
+// The bot re-applies them live via overrides.watch() — see src/bot.js.
+const overrides = require('../src/overrides');
+const { instanceId } = require('../src/instance');
+config.DEFAULTS = Object.freeze({ ...config });
+overrides.apply(config, config.DEFAULTS, overrides.load(), instanceId);
+
+module.exports = config;

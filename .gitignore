@@ -19,3 +19,9 @@ CODE_REVIEW_GRAPH_GUIDE.md
 # Local planning docs (specs, plans)
 docs/
 .claude
+
+# Sofi panel (server-only, hold tokens/secrets)
+accounts.json
+overrides.json
+panel/.env
+panel/*.pem
