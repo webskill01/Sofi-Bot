@@ -94,6 +94,10 @@ let lastScdPlanDate = null;   // Date string of last scd plan
 let activeChannelId = null;     // Currently active channel ID
 let channelDropsRemaining = 0;  // Drops left in current channel session
 let channelSessionTotal = 0;    // Total drops planned for current session (for logging)
+// Channels that are cached but refuse our messages (kicked, muted, channel hidden).
+// ponytail: cleared only on restart; fine since access rarely comes back on its own.
+const blockedChannels = new Set();
+const NO_ACCESS_CODES = new Set([50001, 50013, 10003]); // Missing Access, Missing Permissions, Unknown Channel
 
 /**
  * Rotate to a new channel (different from the current one if possible).
@@ -104,7 +108,7 @@ function rotateChannel() {
   // Discord transiently evicts channels from cache during reconnects, so if
   // nothing is accessible right now we keep the current channel (or pick any
   // from the full list) rather than crashing.
-  let accessible = config.CHANNELS.filter(id => client.channels.cache.has(id));
+  let accessible = config.CHANNELS.filter(id => client.channels.cache.has(id) && !blockedChannels.has(id));
 
   if (accessible.length === 0) {
     // Fallback: keep using the current channel if it's still set, otherwise
@@ -441,6 +445,14 @@ async function triggerDrop() {
     if (isAuthError(err)) stopForInvalidToken(err);
     logger.error(`Failed to send ${command}: ${err.message}`);
     pendingDropMsgId = null;
+    // We lost access to this channel. Without this the bot retried the same
+    // channel forever and mistook it for Sofi downtime (no claims for days).
+    if (NO_ACCESS_CODES.has(err.code) && !blockedChannels.has(activeChannelId)) {
+      blockedChannels.add(activeChannelId);
+      logger.warn(`No access to ${getChannelName()} (${activeChannelId}) — removed from rotation until restart`);
+      rotateChannel();
+      return triggerDrop(); // the guard above stops this recursing if every channel is blocked
+    }
     return null;
   }
 
